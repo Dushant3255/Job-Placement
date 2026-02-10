@@ -6,6 +6,12 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import com.placement.common.ui.HeaderBackButton;
+import com.placement.student.ui.StudentCreateAccountScreen;
+import com.placement.company.ui.CompanyCreateAccountScreen;
+
+
+
 public class CreateAccountScreen extends JFrame {
 
     private JComboBox<String> typeCombo;
@@ -39,21 +45,17 @@ public class CreateAccountScreen extends JFrame {
 
         header.setPreferredSize(new Dimension(420, 120));
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-        header.setBorder(new EmptyBorder(15, 20, 15, 20));
+        header.setBorder(new EmptyBorder(18, 26, 15, 20));
 
         /* ---------- BACK BUTTON ---------- */
-        JButton backBtn = new JButton("← Back");
-        backBtn.setForeground(Color.WHITE);
-        backBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        backBtn.setContentAreaFilled(false);
-        backBtn.setBorderPainted(false);
-        backBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton backBtn = new HeaderBackButton("← Back");
         backBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         backBtn.addActionListener(e -> {
             new LoginScreen().setVisible(true);
             dispose();
         });
+
 
         JLabel title = new JLabel("Create Account");
         title.setForeground(Color.WHITE);
@@ -95,13 +97,16 @@ public class CreateAccountScreen extends JFrame {
 
         continueBtn.addActionListener(e -> {
             String selectedType = (String) typeCombo.getSelectedItem();
-            JOptionPane.showMessageDialog(
-                    this,
-                    selectedType + " account selected",
-                    "Next Step",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
+
+            if ("Student".equals(selectedType)) {
+                new StudentCreateAccountScreen().setVisible(true);
+                dispose();
+            } else {
+                new CompanyCreateAccountScreen().setVisible(true);
+                dispose();
+            }
         });
+
 
         card.add(typeLabel);
         card.add(Box.createVerticalStrut(8));
