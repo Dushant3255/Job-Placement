@@ -7,12 +7,21 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 import com.placement.student.ui.StudentCreateAccountScreen;
+import com.placement.company.ui.CompanyCreateAccountScreen;
 
 public class VerifyOtpScreen extends JFrame {
 
-    private final String email;
-    private final String gender;
-    private final boolean isCompany;
+    public enum Purpose {
+        STUDENT_SIGNUP,
+        COMPANY_SIGNUP,
+        FORGOT_PASSWORD,
+        TWO_FACTOR
+    }
+
+    private final String idText;     // can be email OR username (for 2FA)
+    private final String gender;     // only for student signup
+    private final boolean companyTheme;
+    private final Purpose purpose;
 
     private JTextField otpField;
     private JLabel statusLabel;
@@ -23,38 +32,47 @@ public class VerifyOtpScreen extends JFrame {
 
     private static final String TEST_OTP = "123456";
 
-    // Theme colors (student=purple, company=red)
     private final Color GRAD_START;
     private final Color GRAD_END;
     private final Color PRIMARY_BTN;
     private final Color SECONDARY_BTN_BG;
     private final Color SECONDARY_BTN_FG;
 
-    // Student constructor (existing)
+    /* ---------------- Constructors you already use ---------------- */
+
+    // Student signup (keeps your old calls working)
     public VerifyOtpScreen(String email, String gender) {
-        this(email, gender, false);
+        this(email, gender, false, Purpose.STUDENT_SIGNUP);
     }
 
-    // Company constructor
+    // Company signup (keeps your old calls working)
     public VerifyOtpScreen(String email, boolean isCompany) {
-        this(email, null, isCompany);
+        this(email, null, isCompany, Purpose.COMPANY_SIGNUP);
+    }
+
+    /* ---------------- New reuse constructors ---------------- */
+
+    // Forgot password / 2FA reuse
+    public VerifyOtpScreen(String idText, Purpose purpose) {
+        this(idText, null, false, purpose);
     }
 
     // Main constructor
-    public VerifyOtpScreen(String email, String gender, boolean isCompany) {
-        this.email = email;
+    public VerifyOtpScreen(String idText, String gender, boolean companyTheme, Purpose purpose) {
+        this.idText = idText;
         this.gender = gender;
-        this.isCompany = isCompany;
+        this.companyTheme = companyTheme;
+        this.purpose = purpose;
 
-        if (isCompany) {
+        if (companyTheme) {
             GRAD_START = new Color(220, 38, 38);
-            GRAD_END = new Color(244, 63, 94);
+            GRAD_END   = new Color(244, 63, 94);
             PRIMARY_BTN = new Color(220, 38, 38);
             SECONDARY_BTN_BG = new Color(254, 226, 226);
             SECONDARY_BTN_FG = new Color(185, 28, 28);
         } else {
             GRAD_START = new Color(99, 102, 241);
-            GRAD_END = new Color(124, 58, 237);
+            GRAD_END   = new Color(124, 58, 237);
             PRIMARY_BTN = new Color(99, 102, 241);
             SECONDARY_BTN_BG = new Color(237, 233, 254);
             SECONDARY_BTN_FG = new Color(79, 70, 229);
@@ -74,34 +92,34 @@ public class VerifyOtpScreen extends JFrame {
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(Color.WHITE);
 
-        JPanel header = buildHeader("Verify OTP", e -> {
-            if (isCompany) {
-                // company back: go back to CreateAccountScreen (simple)
-                new CreateAccountScreen().setVisible(true);
-            } else {
-                new StudentCreateAccountScreen().setVisible(true);
-            }
-            dispose();
-        });
+        String subtitle = switch (purpose) {
+            case FORGOT_PASSWORD -> "Reset Password OTP";
+            case TWO_FACTOR -> "Two-Step Verification";
+            default -> "Verify OTP";
+        };
+
+        JPanel header = buildHeader(subtitle, e -> goBack());
         root.add(header, BorderLayout.NORTH);
 
         JPanel form = new JPanel(new GridBagLayout());
         form.setBackground(Color.WHITE);
-        form.setBorder(new EmptyBorder(10, 30, 30, 30));
+        form.setBorder(new EmptyBorder(18, 30, 30, 30));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        JTextField emailField = new JTextField(email);
-        emailField.setEditable(false);
-        styleField(emailField);
+        String firstLabel = (purpose == Purpose.TWO_FACTOR) ? "Username/Email" : "Email";
+
+        JTextField idField = new JTextField(idText);
+        idField.setEditable(false);
+        styleField(idField);
 
         otpField = new JTextField();
         styleField(otpField);
 
         int row = 0;
-        addRow(form, gbc, row++, "Email", emailField);
+        addRow(form, gbc, row++, firstLabel, idField);
         addRow(form, gbc, row++, "Enter OTP", otpField);
 
         gbc.gridx = 0;
@@ -141,6 +159,43 @@ public class VerifyOtpScreen extends JFrame {
         add(root);
     }
 
+    private void goBack() {
+        switch (purpose) {
+            case STUDENT_SIGNUP -> new StudentCreateAccountScreen().setVisible(true);
+            case COMPANY_SIGNUP -> new CompanyCreateAccountScreen().setVisible(true);
+            case FORGOT_PASSWORD -> new ForgotPasswordScreen(idText).setVisible(true);
+            case TWO_FACTOR -> new LoginScreen().setVisible(true);
+        }
+        dispose();
+    }
+
+    private void onVerifiedSuccess() {
+        switch (purpose) {
+            case STUDENT_SIGNUP -> {
+                new ProfilePictureScreen(idText, gender, false).setVisible(true);
+                dispose();
+            }
+            case COMPANY_SIGNUP -> {
+                new ProfilePictureScreen(idText, null, true).setVisible(true);
+                dispose();
+            }
+            case FORGOT_PASSWORD -> {
+                new ResetPasswordScreen(idText).setVisible(true);
+                dispose();
+            }
+            case TWO_FACTOR -> {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Two-step verification successful!",
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+                new LoginScreen().setVisible(true);
+                dispose();
+            }
+        }
+    }
+
     private void sendOtp() {
         setBusy(true, "Sending OTP...");
 
@@ -175,10 +230,7 @@ public class VerifyOtpScreen extends JFrame {
                     if (!ok) { setError("Invalid OTP. Try 123456."); return; }
 
                     setBusy(false, "Verified!");
-
-                    // ✅ student -> profile picture, company -> logo (same screen)
-                    new ProfilePictureScreen(email, gender, isCompany).setVisible(true);
-                    dispose();
+                    onVerifiedSuccess();
 
                 } catch (Exception ex) {
                     setError("Verification failed. Try again.");
@@ -215,7 +267,7 @@ public class VerifyOtpScreen extends JFrame {
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel subtitle = new JLabel(subtitleText);
-        subtitle.setForeground(isCompany ? new Color(255, 230, 230) : new Color(230, 230, 255));
+        subtitle.setForeground(companyTheme ? new Color(255, 230, 230) : new Color(230, 230, 255));
         subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -282,10 +334,7 @@ public class VerifyOtpScreen extends JFrame {
             setFocusPainted(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
-
-            // If background is light (secondary button), caller sets foreground manually
             setForeground(Color.WHITE);
-
             setFont(new Font("Segoe UI", Font.BOLD, 14));
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             setBorder(BorderFactory.createEmptyBorder(10, 28, 10, 28));

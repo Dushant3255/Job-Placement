@@ -55,7 +55,7 @@ public class LoginScreen extends JFrame {
         /* ---------- FORM ---------- */
         JPanel form = new JPanel(new GridBagLayout());
         form.setBackground(Color.WHITE);
-        form.setBorder(new EmptyBorder(10, 30, 30, 30)); // ⬆ moved up
+        form.setBorder(new EmptyBorder(10, 30, 30, 30));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
@@ -106,7 +106,7 @@ public class LoginScreen extends JFrame {
         gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.CENTER;
 
-        errorLabel = new JLabel(" ",SwingConstants.CENTER);
+        errorLabel = new JLabel(" ", SwingConstants.CENTER);
         errorLabel.setForeground(Color.RED);
         errorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         form.add(errorLabel, gbc);
@@ -148,17 +148,25 @@ public class LoginScreen extends JFrame {
         form.add(forgot, gbc);
 
         /* ---------- ACTIONS ---------- */
+
+        // ✅ No backend yet: allow sign-in with any non-empty username + password
         signIn.addActionListener(e -> {
-            if (userField.getText().isEmpty() || passField.getPassword().length == 0) {
+            if (userField.getText().trim().isEmpty() || passField.getPassword().length == 0) {
                 errorLabel.setText("Username and password are required.");
             } else {
                 errorLabel.setText(" ");
                 JOptionPane.showMessageDialog(this, "Login successful!");
+                // Later you can redirect to Dashboard screen here.
             }
         });
 
         createAccount.addActionListener(e -> {
             new CreateAccountScreen().setVisible(true);
+            dispose();
+        });
+
+        forgot.addActionListener(e -> {
+            new ForgotPasswordScreen().setVisible(true);
             dispose();
         });
 

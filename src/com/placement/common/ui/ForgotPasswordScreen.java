@@ -15,15 +15,19 @@ public class ForgotPasswordScreen extends JFrame {
     private static final Color GRAD_END   = new Color(124, 58, 237);
 
     public ForgotPasswordScreen() {
+        this("");
+    }
+
+    public ForgotPasswordScreen(String prefillEmail) {
         setTitle("Student Placement Portal");
         setSize(420, 520);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setResizable(false);
-        initUI();
+        initUI(prefillEmail);
     }
 
-    private void initUI() {
+    private void initUI(String prefillEmail) {
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(Color.WHITE);
 
@@ -41,7 +45,7 @@ public class ForgotPasswordScreen extends JFrame {
         gbc.insets = new Insets(6, 6, 6, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        emailField = new JTextField();
+        emailField = new JTextField(prefillEmail);
         styleField(emailField);
 
         int row = 0;
@@ -63,7 +67,6 @@ public class ForgotPasswordScreen extends JFrame {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttons.setBackground(Color.WHITE);
         buttons.add(sendBtn);
-
         form.add(buttons, gbc);
 
         sendBtn.addActionListener(e -> {

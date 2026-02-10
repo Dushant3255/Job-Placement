@@ -3,18 +3,14 @@ package com.placement.common.ui;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 
 public class ResetPasswordScreen extends JFrame {
 
     private final String email;
-
     private JPasswordField pass1;
     private JPasswordField pass2;
     private JLabel errorLabel;
-    private char echo1;
-    private char echo2;
+    private char echo1, echo2;
 
     private static final Color GRAD_START = new Color(99, 102, 241);
     private static final Color GRAD_END   = new Color(124, 58, 237);
@@ -65,7 +61,6 @@ public class ResetPasswordScreen extends JFrame {
         addRow(form, gbc, row++, "New Password", pass1);
         addRow(form, gbc, row++, "Confirm Password", pass2);
 
-        // Show password
         gbc.gridx = 1;
         gbc.gridy = row++;
         gbc.gridwidth = 1;
