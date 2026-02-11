@@ -1,0 +1,15 @@
+# Build output
+/out/
+/bin/
+*.class
+
+# DB files
+*.db
+
+# VS Code
+.vscode/
+
+# Eclipse (when you move)
+.project
+.classpath
+.settings/
