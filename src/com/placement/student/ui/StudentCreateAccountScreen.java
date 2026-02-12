@@ -10,11 +10,16 @@ import com.placement.common.ui.HeaderBackButton;
 import com.placement.common.ui.CreateAccountScreen;
 import com.placement.common.ui.VerifyOtpScreen;
 
+import com.placement.common.service.RegistrationService;
+import com.placement.student.model.StudentProfile;
+
 public class StudentCreateAccountScreen extends JFrame {
 
     private JLabel errorLabel;
     private char defaultEcho1;
     private char defaultEcho2;
+
+    private final RegistrationService registrationService = new RegistrationService();
 
     public StudentCreateAccountScreen() {
         setTitle("Student Placement Portal");
@@ -111,30 +116,90 @@ public class StudentCreateAccountScreen extends JFrame {
         form.add(buttons, gbc);
 
         continueBtn.addActionListener(e -> {
-            if (firstName.getText().trim().isEmpty()
-                    || lastName.getText().trim().isEmpty()
-                    || username.getText().trim().isEmpty()
-                    || email.getText().trim().isEmpty()
-                    || password.getPassword().length == 0
-                    || confirmPassword.getPassword().length == 0) {
+            String fn = firstName.getText().trim();
+            String ln = lastName.getText().trim();
+            String un = username.getText().trim();
+            String em = email.getText().trim();
+            String gender = (String) genderBox.getSelectedItem();
+
+            String p1 = String.valueOf(password.getPassword());
+            String p2 = String.valueOf(confirmPassword.getPassword());
+
+            if (fn.isEmpty() || ln.isEmpty() || un.isEmpty() || em.isEmpty()
+                    || password.getPassword().length == 0 || confirmPassword.getPassword().length == 0) {
                 errorLabel.setText("All fields are required.");
                 return;
             }
 
-            String p1 = String.valueOf(password.getPassword());
-            String p2 = String.valueOf(confirmPassword.getPassword());
+            if (!em.contains("@") || !em.contains(".")) {
+                errorLabel.setText("Please enter a valid email.");
+                return;
+            }
+
+            if (p1.length() < 8) {
+                errorLabel.setText("Password must be at least 8 characters.");
+                return;
+            }
+
             if (!p1.equals(p2)) {
                 errorLabel.setText("Passwords do not match.");
                 return;
             }
 
             errorLabel.setText(" ");
+            continueBtn.setEnabled(false);
 
-            new VerifyOtpScreen(
-                    email.getText().trim(),
-                    (String) genderBox.getSelectedItem()
-            ).setVisible(true);
-            dispose();
+            StudentProfile profile = new StudentProfile(fn, ln, gender, null);
+
+            new SwingWorker<Void, Void>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    registrationService.registerStudentPendingOtp(un, em, p1, profile);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get();
+                        continueBtn.setEnabled(true);
+
+                        // ✅ OTP screen will send OTP (test mode still works with 123456)
+                        new VerifyOtpScreen(em, gender).setVisible(true);
+                        dispose();
+
+                    } catch (Exception ex) {
+                        continueBtn.setEnabled(true);
+
+                        Throwable root = ex;
+                        if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                            root = ex.getCause();
+                        }
+
+                        String msg = (root.getMessage() == null) ? "" : root.getMessage();
+                        String lower = msg.toLowerCase();
+
+                        if (lower.contains("username already exists")) {
+                            errorLabel.setText("Username already in use.");
+                            return;
+                        }
+                        if (lower.contains("email already exists")) {
+                            errorLabel.setText("Email already in use.");
+                            return;
+                        }
+                        if (lower.contains("unique constraint failed: users.username")) {
+                            errorLabel.setText("Username already in use.");
+                            return;
+                        }
+                        if (lower.contains("unique constraint failed: users.email")) {
+                            errorLabel.setText("Email already in use.");
+                            return;
+                        }
+
+                        errorLabel.setText(msg.isBlank() ? "Registration failed." : msg);
+                    }
+                }
+            }.execute();
         });
 
         root.add(header, BorderLayout.NORTH);

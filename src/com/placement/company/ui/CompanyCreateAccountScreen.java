@@ -10,6 +10,10 @@ import com.placement.common.ui.CreateAccountScreen;
 import com.placement.common.ui.HeaderBackButton;
 import com.placement.common.ui.VerifyOtpScreen;
 
+// ✅ backend imports (added)
+import com.placement.common.service.RegistrationService;
+import com.placement.company.model.CompanyProfile;
+
 public class CompanyCreateAccountScreen extends JFrame {
 
     private JLabel errorLabel;
@@ -23,6 +27,9 @@ public class CompanyCreateAccountScreen extends JFrame {
     private static final Color PRIMARY_BTN = new Color(220, 38, 38);
     private static final Color SECONDARY_BG = new Color(254, 226, 226);
     private static final Color SECONDARY_FG = new Color(185, 28, 28);
+
+    // ✅ backend service (added)
+    private final RegistrationService registrationService = new RegistrationService();
 
     public CompanyCreateAccountScreen() {
         setTitle("Student Placement Portal");
@@ -157,36 +164,123 @@ public class CompanyCreateAccountScreen extends JFrame {
         buttons.add(continueBtn);
         form.add(buttons, gbc);
 
+        // ✅ ONLY logic changed: validations + backend call
         continueBtn.addActionListener(e -> {
-            // basic validations
-            if (companyName.getText().trim().isEmpty()
-                    || email.getText().trim().isEmpty()
-                    || username.getText().trim().isEmpty()
-                    || phone.getText().trim().isEmpty()
+
+            String cName = companyName.getText().trim();
+            String em = email.getText().trim();
+            String un = username.getText().trim();
+            String ph = phone.getText().trim();
+            String web = website.getText().trim();
+            String industry = (String) industryBox.getSelectedItem();
+            String size = (String) sizeBox.getSelectedItem();
+            String addr = addressArea.getText().trim();
+
+            String p1 = String.valueOf(password.getPassword());
+            String p2 = String.valueOf(confirmPassword.getPassword());
+
+            // Required fields (keeping your original set)
+            if (cName.isEmpty()
+                    || em.isEmpty()
+                    || un.isEmpty()
+                    || ph.isEmpty()
                     || password.getPassword().length == 0
                     || confirmPassword.getPassword().length == 0) {
                 errorLabel.setText("Please fill all required fields.");
                 return;
             }
 
-            String em = email.getText().trim();
+            // Email check (keeping your original)
             if (!em.contains("@") || !em.contains(".")) {
                 errorLabel.setText("Please enter a valid email.");
                 return;
             }
 
-            String p1 = String.valueOf(password.getPassword());
-            String p2 = String.valueOf(confirmPassword.getPassword());
+            // ✅ Password min 8 chars (added)
+            if (p1.length() < 8) {
+                errorLabel.setText("Password must be at least 8 characters.");
+                return;
+            }
+
+            // Password match (keeping your original)
             if (!p1.equals(p2)) {
                 errorLabel.setText("Passwords do not match.");
                 return;
             }
 
-            errorLabel.setText(" ");
+            // ✅ Phone: 8 digits starting with 5 (added)
+            if (!ph.matches("^5\\d{7}$")) {
+                errorLabel.setText("Phone must be 8 digits and start with 5.");
+                return;
+            }
 
-            // ✅ Company mode OTP (red theme + logo screen after)
-            new VerifyOtpScreen(em, true).setVisible(true);
-            dispose();
+            errorLabel.setText(" ");
+            continueBtn.setEnabled(false);
+
+            CompanyProfile profile = new CompanyProfile(
+                    cName,
+                    ph,
+                    web,
+                    industry,
+                    size,
+                    addr
+            );
+
+            new SwingWorker<Void, Void>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    registrationService.registerCompanyPendingOtp(un, em, p1, profile);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get();
+
+                        continueBtn.setEnabled(true);
+                        errorLabel.setText(" ");
+
+                        new VerifyOtpScreen(em, true).setVisible(true);
+                        dispose();
+
+                    } catch (Exception ex) {
+                        continueBtn.setEnabled(true);
+
+                        // ✅ unwrap SwingWorker/ExecutionException so we don't show "java.lang...."
+                        Throwable root = ex;
+                        if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                            root = ex.getCause();
+                        }
+
+                        String msg = (root.getMessage() == null) ? "" : root.getMessage();
+
+                        // ✅ map common DB constraint errors (SQLite) to friendly text
+                        String lower = msg.toLowerCase();
+
+                        if (lower.contains("username already exists")) {
+                            errorLabel.setText("Username already in use.");
+                            return;
+                        }
+                        if (lower.contains("email already exists")) {
+                            errorLabel.setText("Email already in use.");
+                            return;
+                        }
+                        if (lower.contains("unique constraint failed: users.username")) {
+                            errorLabel.setText("Username already in use.");
+                            return;
+                        }
+                        if (lower.contains("unique constraint failed: users.email")) {
+                            errorLabel.setText("Email already in use.");
+                            return;
+                        }
+
+                        // fallback
+                        errorLabel.setText(msg.isBlank() ? "Registration failed." : msg);
+                    }
+                }
+
+            }.execute();
         });
 
         root.add(header, BorderLayout.NORTH);

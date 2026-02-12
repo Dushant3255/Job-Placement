@@ -6,10 +6,16 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import com.placement.common.model.UserRole;
+import com.placement.common.service.AuthService;
+
 public class LoginScreen extends JFrame {
 
     private char defaultEcho;
     private JLabel errorLabel;
+
+    // ✅ backend
+    private final AuthService authService = new AuthService();
 
     public LoginScreen() {
         setTitle("Student Placement Portal");
@@ -66,7 +72,7 @@ public class LoginScreen extends JFrame {
         gbc.gridy = 0;
         gbc.weightx = 0;
         gbc.anchor = GridBagConstraints.WEST;
-        form.add(new JLabel("Username"), gbc);
+        form.add(new JLabel("Username / Email"), gbc);
 
         gbc.gridx = 1;
         gbc.weightx = 1;
@@ -87,7 +93,7 @@ public class LoginScreen extends JFrame {
         defaultEcho = passField.getEchoChar();
         form.add(passField, gbc);
 
-        /* ---------- SHOW PASSWORD (BELOW & RIGHT) ---------- */
+        /* ---------- SHOW PASSWORD ---------- */
         gbc.gridx = 1;
         gbc.gridy = 2;
         gbc.weightx = 1;
@@ -114,10 +120,8 @@ public class LoginScreen extends JFrame {
         /* ---------- BUTTONS ---------- */
         gbc.gridy = 4;
 
-        InteractiveButton signIn =
-                new InteractiveButton("Sign In", new Color(99, 102, 241));
-        InteractiveButton createAccount =
-                new InteractiveButton("Create Account", new Color(237, 233, 254));
+        InteractiveButton signIn = new InteractiveButton("Sign In", new Color(99, 102, 241));
+        InteractiveButton createAccount = new InteractiveButton("Create Account", new Color(237, 233, 254));
         createAccount.setForeground(new Color(79, 70, 229));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
@@ -137,27 +141,91 @@ public class LoginScreen extends JFrame {
         forgot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         forgot.addMouseListener(new MouseAdapter() {
-            public void mouseEntered(MouseEvent e) {
-                forgot.setForeground(new Color(79, 70, 229));
-            }
-            public void mouseExited(MouseEvent e) {
-                forgot.setForeground(Color.GRAY);
-            }
+            public void mouseEntered(MouseEvent e) { forgot.setForeground(new Color(79, 70, 229)); }
+            public void mouseExited(MouseEvent e) { forgot.setForeground(Color.GRAY); }
         });
 
         form.add(forgot, gbc);
 
         /* ---------- ACTIONS ---------- */
 
-        // ✅ No backend yet: allow sign-in with any non-empty username + password
         signIn.addActionListener(e -> {
-            if (userField.getText().trim().isEmpty() || passField.getPassword().length == 0) {
-                errorLabel.setText("Username and password are required.");
-            } else {
-                errorLabel.setText(" ");
-                JOptionPane.showMessageDialog(this, "Login successful!");
-                // Later you can redirect to Dashboard screen here.
+            String login = userField.getText().trim();
+            String pw = String.valueOf(passField.getPassword());
+
+            if (login.isEmpty() || pw.isEmpty()) {
+                errorLabel.setText("Username/email and password are required.");
+                return;
             }
+
+            errorLabel.setText(" ");
+            signIn.setEnabled(false);
+
+            new SwingWorker<AuthService.AuthResult, Void>() {
+                @Override
+                protected AuthService.AuthResult doInBackground() throws Exception {
+                    return authService.login(login, pw);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        AuthService.AuthResult result = get();
+                        signIn.setEnabled(true);
+
+                        if (result.status == AuthService.AuthStatus.FAIL) {
+                            errorLabel.setText(result.message);
+                            return;
+                        }
+
+                        if (result.status == AuthService.AuthStatus.NEEDS_VERIFICATION) {
+                            // ✅ Send them to OTP verification
+                            String email = result.user.getEmail();
+                            UserRole role = result.user.getRole();
+
+                            JOptionPane.showMessageDialog(
+                                    LoginScreen.this,
+                                    "Your account is not verified yet. Please verify OTP.",
+                                    "Verification Required",
+                                    JOptionPane.INFORMATION_MESSAGE
+                            );
+
+                            if (role == UserRole.COMPANY) {
+                                new VerifyOtpScreen(email, true).setVisible(true);
+                            } else {
+                                new VerifyOtpScreen(email, (String) null).setVisible(true);
+                            }
+                            dispose();
+                            return;
+                        }
+
+                        // ✅ SUCCESS
+                        errorLabel.setText(" ");
+                        JOptionPane.showMessageDialog(
+                                LoginScreen.this,
+                                "Login successful! Welcome " + result.user.getUsername(),
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE
+                        );
+
+                        // TODO (next step): open dashboard by role
+                        // if (result.user.getRole() == UserRole.COMPANY) new CompanyDashboardScreen(...).setVisible(true);
+                        // else new StudentDashboardScreen(...).setVisible(true);
+                        // dispose();
+
+                    } catch (Exception ex) {
+                        signIn.setEnabled(true);
+
+                        Throwable root = ex;
+                        if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                            root = ex.getCause();
+                        }
+
+                        String msg = (root.getMessage() == null) ? "Login failed." : root.getMessage();
+                        errorLabel.setText(msg);
+                    }
+                }
+            }.execute();
         });
 
         createAccount.addActionListener(e -> {
@@ -200,6 +268,7 @@ public class LoginScreen extends JFrame {
             setBorder(BorderFactory.createEmptyBorder(10, 26, 10, 26));
         }
 
+        @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

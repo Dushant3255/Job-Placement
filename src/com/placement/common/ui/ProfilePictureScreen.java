@@ -1,13 +1,15 @@
 package com.placement.common.ui;
 
+import com.placement.company.service.CompanyLogoService;
+import com.placement.student.service.StudentProfilePictureService;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
-
 import java.awt.*;
-import java.awt.dnd.*;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.dnd.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -38,6 +40,9 @@ public class ProfilePictureScreen extends JFrame {
     private final Color SECONDARY_BG;
     private final Color SECONDARY_FG;
     private final Color LINK_HOVER;
+
+    private final CompanyLogoService companyLogoService = new CompanyLogoService();
+    private final StudentProfilePictureService studentProfilePictureService = new StudentProfilePictureService();
 
     public ProfilePictureScreen(String email, String gender, boolean isCompany) {
         this.email = email;
@@ -183,6 +188,7 @@ public class ProfilePictureScreen extends JFrame {
                 try {
                     dtde.acceptDrop(DnDConstants.ACTION_COPY);
                     Object data = dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+
                     if (data instanceof List) {
                         List<File> files = (List<File>) data;
                         if (!files.isEmpty()) {
@@ -230,7 +236,7 @@ public class ProfilePictureScreen extends JFrame {
         SwingWorker<BufferedImage, Void> worker = new SwingWorker<>() {
             @Override
             protected BufferedImage doInBackground() throws Exception {
-                Thread.sleep(600);
+                Thread.sleep(300);
                 BufferedImage img = ImageIO.read(file);
                 if (img == null) throw new IllegalArgumentException("Not an image");
                 return img;
@@ -274,59 +280,74 @@ public class ProfilePictureScreen extends JFrame {
         return "other";
     }
 
+    private static class DefaultPick {
+        final BufferedImage img;
+        final String name;
+        DefaultPick(BufferedImage img, String name) { this.img = img; this.name = name; }
+    }
+
+    private DefaultPick loadDefaultImage() throws Exception {
+        String[] candidates;
+
+        if (isCompany) {
+            candidates = new String[]{"default_company_logo.png", "default_logo.png", "company_logo.png"};
+        } else {
+            String key = genderKey();
+            if (key.equals("female")) candidates = new String[]{"default_female.png", "female.png"};
+            else if (key.equals("male")) candidates = new String[]{"default_male.png", "male.png"};
+            else candidates = new String[]{"default_other.png", "other.png"};
+        }
+
+        for (String name : candidates) {
+            try (InputStream in = getClass().getResourceAsStream("/images/" + name)) {
+                if (in != null) {
+                    BufferedImage img = ImageIO.read(in);
+                    if (img != null) return new DefaultPick(img, name);
+                }
+            }
+        }
+
+        for (String name : candidates) {
+            File disk = new File("resources/images/" + name);
+            if (disk.exists()) {
+                BufferedImage img = ImageIO.read(disk);
+                if (img != null) return new DefaultPick(img, name);
+            }
+        }
+
+        throw new IllegalStateException("Default image not found");
+    }
+
     private void applyDefaultAndFinish() {
         setBusy(true, "Applying default...");
 
-        SwingWorker<BufferedImage, Void> worker = new SwingWorker<>() {
+        SwingWorker<DefaultPick, Void> worker = new SwingWorker<>() {
             @Override
-            protected BufferedImage doInBackground() throws Exception {
-                Thread.sleep(450);
-
-                String[] candidates;
+            protected DefaultPick doInBackground() throws Exception {
+                Thread.sleep(200);
+                DefaultPick pick = loadDefaultImage();
 
                 if (isCompany) {
-                    candidates = new String[]{"default_company_logo.png", "default_logo.png", "company_logo.png"};
+                    // ✅ FIX: must pass default image name
+                    companyLogoService.applyDefaultLogo(email, pick.name);
                 } else {
-                    String key = genderKey();
-                    if (key.equals("female")) candidates = new String[]{"default_female.png", "female.png"};
-                    else if (key.equals("male")) candidates = new String[]{"default_male.png", "male.png"};
-                    else candidates = new String[]{"default_other.png", "other.png"};
+                    // ✅ Student default should save to DB too
+                    studentProfilePictureService.applyDefaultProfilePicture(email, pick.name);
                 }
 
-                BufferedImage img = null;
-
-                for (String name : candidates) {
-                    try (InputStream in = getClass().getResourceAsStream("/images/" + name)) {
-                        if (in != null) {
-                            img = ImageIO.read(in);
-                            if (img != null) { defaultImageName = name; break; }
-                        }
-                    }
-                }
-
-                if (img == null) {
-                    for (String name : candidates) {
-                        File disk = new File("resources/images/" + name);
-                        if (disk.exists()) {
-                            img = ImageIO.read(disk);
-                            if (img != null) { defaultImageName = name; break; }
-                        }
-                    }
-                }
-
-                if (img == null) throw new IllegalStateException("Default not found");
-                return img;
+                return pick;
             }
 
             @Override
             protected void done() {
                 try {
-                    BufferedImage img = get();
+                    DefaultPick pick = get();
 
                     selectedImageFile = null;
                     usingDefaultImage = true;
+                    defaultImageName = pick.name;
 
-                    Image scaled = scaleToFit(img, DROP_W, DROP_H);
+                    Image scaled = scaleToFit(pick.img, DROP_W, DROP_H);
                     previewLabel.setText("");
                     previewLabel.setIcon(new ImageIcon(scaled));
 
@@ -343,7 +364,11 @@ public class ProfilePictureScreen extends JFrame {
                     dispose();
 
                 } catch (Exception ex) {
-                    setError("Default not found. Put default images in /images/ or resources/images/.");
+                    Throwable root = ex;
+                    if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                        root = ex.getCause();
+                    }
+                    setError("Error: " + (root.getMessage() == null ? "Unknown error" : root.getMessage()));
                 }
             }
         };
@@ -352,25 +377,101 @@ public class ProfilePictureScreen extends JFrame {
 
     private void onSave() {
         if (selectedImageFile == null && !usingDefaultImage) {
-            if (isCompany) {
-                applyDefaultAndFinish(); // auto-default company logo
-                return;
-            } else {
-                setError("Please upload a profile picture or click 'Maybe later'.");
-                return;
-            }
+            applyDefaultAndFinish();
+            return;
         }
 
-        JOptionPane.showMessageDialog(
-                this,
-                (isCompany ? "Company logo saved!" : "Profile picture saved!"),
-                "Success",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+        // ✅ Company save
+        if (isCompany) {
+            if (selectedImageFile == null) {
+                applyDefaultAndFinish();
+                return;
+            }
 
-        new LoginScreen().setVisible(true);
-        dispose();
+            setBusy(true, "Saving logo...");
+
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    companyLogoService.saveUploadedLogo(email, selectedImageFile);
+                    Thread.sleep(150);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get();
+                        setBusy(false, "Saved.");
+
+                        JOptionPane.showMessageDialog(
+                                ProfilePictureScreen.this,
+                                "Company logo saved!",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE
+                        );
+
+                        new LoginScreen().setVisible(true);
+                        dispose();
+
+                    } catch (Exception ex) {
+                        Throwable root = ex;
+                        if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                            root = ex.getCause();
+                        }
+                        setError("Save failed: " + (root.getMessage() == null ? "Unknown error" : root.getMessage()));
+                    }
+                }
+            };
+            worker.execute();
+            return;
+        }
+
+        // ✅ Student save
+        if (selectedImageFile == null) {
+            applyDefaultAndFinish();
+            return;
+        }
+
+        setBusy(true, "Saving picture...");
+
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                studentProfilePictureService.saveUploadedProfilePicture(email, selectedImageFile);
+                Thread.sleep(150);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    setBusy(false, "Saved.");
+
+                    JOptionPane.showMessageDialog(
+                            ProfilePictureScreen.this,
+                            "Profile picture saved!",
+                            "Success",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+
+                    new LoginScreen().setVisible(true);
+                    dispose();
+
+                } catch (Exception ex) {
+                    Throwable root = ex;
+                    if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                        root = ex.getCause();
+                    }
+                    setError("Save failed: " + (root.getMessage() == null ? "Unknown error" : root.getMessage()));
+                }
+            }
+        };
+        worker.execute();
     }
+
+    /* ---------- Header + UI helpers ---------- */
 
     private JPanel buildHeader(String subtitleText, java.awt.event.ActionListener backAction) {
         JPanel header = new JPanel() {
@@ -490,7 +591,7 @@ public class ProfilePictureScreen extends JFrame {
         }
 
         @Override
-       	protected void paintComponent(Graphics g) {
+        protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 

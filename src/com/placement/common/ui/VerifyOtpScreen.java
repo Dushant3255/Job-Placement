@@ -5,9 +5,15 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 import com.placement.student.ui.StudentCreateAccountScreen;
 import com.placement.company.ui.CompanyCreateAccountScreen;
+
+import com.placement.common.dao.UserDao;
+import com.placement.common.model.User;
+import com.placement.common.service.OtpService;
 
 public class VerifyOtpScreen extends JFrame {
 
@@ -30,7 +36,9 @@ public class VerifyOtpScreen extends JFrame {
     private InteractiveButton verifyBtn;
     private InteractiveButton resendBtn;
 
-    private static final String TEST_OTP = "123456";
+    // Backend
+    private final OtpService otpService = new OtpService();
+    private final UserDao userDao = new UserDao();
 
     private final Color GRAD_START;
     private final Color GRAD_END;
@@ -38,19 +46,20 @@ public class VerifyOtpScreen extends JFrame {
     private final Color SECONDARY_BTN_BG;
     private final Color SECONDARY_BTN_FG;
 
+    // ✅ prevent duplicate auto-send
+    private boolean otpSentOnce = false;
+
     /* ---------------- Constructors you already use ---------------- */
 
-    // Student signup (keeps your old calls working)
+    // Student signup
     public VerifyOtpScreen(String email, String gender) {
         this(email, gender, false, Purpose.STUDENT_SIGNUP);
     }
 
-    // Company signup (keeps your old calls working)
+    // Company signup
     public VerifyOtpScreen(String email, boolean isCompany) {
         this(email, null, isCompany, Purpose.COMPANY_SIGNUP);
     }
-
-    /* ---------------- New reuse constructors ---------------- */
 
     // Forgot password / 2FA reuse
     public VerifyOtpScreen(String idText, Purpose purpose) {
@@ -85,7 +94,17 @@ public class VerifyOtpScreen extends JFrame {
         setResizable(false);
 
         initUI();
-        sendOtp();
+
+        // ✅ SEND OTP AUTOMATICALLY when the window opens (signup + forgot + 2FA)
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowOpened(WindowEvent e) {
+                if (!otpSentOnce) {
+                    otpSentOnce = true;
+                    sendOtp();
+                }
+            }
+        });
     }
 
     private void initUI() {
@@ -196,16 +215,47 @@ public class VerifyOtpScreen extends JFrame {
         }
     }
 
+    /**
+     * Resolve which email to store/verify OTP against.
+     * - For TWO_FACTOR, idText may be username/email, so resolve to user's email in DB.
+     * - For others, idText is already email.
+     */
+    private String resolveEmailForOtp() throws Exception {
+        if (purpose != Purpose.TWO_FACTOR) return idText.trim();
+
+        User u = userDao.findByUsernameOrEmail(idText.trim());
+        if (u == null) return null;
+        return u.getEmail();
+    }
+
     private void sendOtp() {
         setBusy(true, "Sending OTP...");
 
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                Thread.sleep(500);
+                String email = resolveEmailForOtp();
+                if (email == null || email.isBlank()) {
+                    throw new IllegalArgumentException("Account not found.");
+                }
+                otpService.issueOtp(email.trim(), purpose.name());
                 return null;
             }
+
             @Override protected void done() {
-                setBusy(false, "OTP sent. (Testing OTP: 123456)");
+                try {
+                    get();
+                    if (otpService.isTestMode()) {
+                        setBusy(false, "TEST MODE: use OTP 123456");
+                    } else {
+                        setBusy(false, "OTP sent to your email.");
+                    }
+                } catch (Exception ex) {
+                    Throwable root = ex;
+                    if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                        root = ex.getCause();
+                    }
+                    setError("Failed to send OTP: " + (root.getMessage() == null ? "Unknown error" : root.getMessage()));
+                }
             }
         };
         worker.execute();
@@ -221,13 +271,28 @@ public class VerifyOtpScreen extends JFrame {
 
         SwingWorker<Boolean, Void> worker = new SwingWorker<>() {
             @Override protected Boolean doInBackground() throws Exception {
-                Thread.sleep(450);
-                return TEST_OTP.equals(entered);
+                String email = resolveEmailForOtp();
+                if (email == null || email.isBlank()) return false;
+
+                Thread.sleep(150);
+                return otpService.verifyOtp(email, purpose.name(), entered);
             }
+
             @Override protected void done() {
                 try {
                     boolean ok = get();
-                    if (!ok) { setError("Invalid OTP. Try 123456."); return; }
+                    if (!ok) {
+                        setError(otpService.isTestMode()
+                                ? "Invalid or expired OTP. Try 123456."
+                                : "Invalid or expired OTP.");
+                        return;
+                    }
+
+                    // ✅ For signups, mark verified in DB
+                    if (purpose == Purpose.STUDENT_SIGNUP || purpose == Purpose.COMPANY_SIGNUP) {
+                        String email = resolveEmailForOtp();
+                        if (email != null) userDao.setVerifiedByEmail(email, true);
+                    }
 
                     setBusy(false, "Verified!");
                     onVerifiedSuccess();

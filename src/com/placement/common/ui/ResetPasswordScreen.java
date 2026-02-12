@@ -1,5 +1,7 @@
 package com.placement.common.ui;
 
+import com.placement.common.service.PasswordResetService;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -11,6 +13,8 @@ public class ResetPasswordScreen extends JFrame {
     private JPasswordField pass2;
     private JLabel errorLabel;
     private char echo1, echo2;
+
+    private final PasswordResetService passwordResetService = new PasswordResetService();
 
     private static final Color GRAD_START = new Color(99, 102, 241);
     private static final Color GRAD_END   = new Color(124, 58, 237);
@@ -101,12 +105,48 @@ public class ResetPasswordScreen extends JFrame {
 
             if (p1.isEmpty() || p2.isEmpty()) { errorLabel.setText("All fields are required."); return; }
             if (!p1.equals(p2)) { errorLabel.setText("Passwords do not match."); return; }
-            if (p1.length() < 6) { errorLabel.setText("Password must be at least 6 characters."); return; }
+
+            // ✅ Make it consistent with your other screens (8 chars)
+            if (p1.length() < 8) { errorLabel.setText("Password must be at least 8 characters."); return; }
 
             errorLabel.setText(" ");
-            JOptionPane.showMessageDialog(this, "Password reset successful!", "Success", JOptionPane.INFORMATION_MESSAGE);
-            new LoginScreen().setVisible(true);
-            dispose();
+            resetBtn.setEnabled(false);
+
+            new SwingWorker<Void, Void>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    passwordResetService.resetPassword(email, p1);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get();
+                        resetBtn.setEnabled(true);
+
+                        JOptionPane.showMessageDialog(
+                                ResetPasswordScreen.this,
+                                "Password reset successful!",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE
+                        );
+
+                        new LoginScreen().setVisible(true);
+                        dispose();
+
+                    } catch (Exception ex) {
+                        resetBtn.setEnabled(true);
+
+                        Throwable root = ex;
+                        if (ex instanceof java.util.concurrent.ExecutionException && ex.getCause() != null) {
+                            root = ex.getCause();
+                        }
+                        String msg = (root.getMessage() == null) ? "Reset failed." : root.getMessage();
+                        errorLabel.setText(msg);
+                    }
+                }
+            }.execute();
         });
 
         root.add(form, BorderLayout.CENTER);
