@@ -13,3 +13,9 @@
 .project
 .classpath
 .settings/
+
+/data/
+*.db
+
+*.properties
+*.env

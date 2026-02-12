@@ -1,13 +1,14 @@
 package com.placement.common.ui;
 
+import com.placement.company.service.CompanyLogoService;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
-
 import java.awt.*;
-import java.awt.dnd.*;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.dnd.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -29,15 +30,20 @@ public class ProfilePictureScreen extends JFrame {
     private boolean usingDefaultImage = false;
     private String defaultImageName = "";
 
+    // ✅ Only enlarge the drop zone
     private static final int DROP_W = 350;
     private static final int DROP_H = 320;
 
+    // Theme colors
     private final Color GRAD_START;
     private final Color GRAD_END;
     private final Color PRIMARY_BTN;
     private final Color SECONDARY_BG;
     private final Color SECONDARY_FG;
     private final Color LINK_HOVER;
+
+    // ✅ backend (company only for now)
+    private final CompanyLogoService companyLogoService = new CompanyLogoService();
 
     public ProfilePictureScreen(String email, String gender, boolean isCompany) {
         this.email = email;
@@ -121,6 +127,7 @@ public class ProfilePictureScreen extends JFrame {
         JButton maybeLaterBtn = createLinkButton("Maybe later");
         maybeLaterBtn.addActionListener(e -> applyDefaultAndFinish());
 
+        // Drop area
         gbc.gridx = 0;
         gbc.gridy = row++;
         gbc.gridwidth = 2;
@@ -129,6 +136,7 @@ public class ProfilePictureScreen extends JFrame {
         gbc.fill = GridBagConstraints.BOTH;
         form.add(dropArea, gbc);
 
+        // Status + progress
         gbc.gridy = row++;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         form.add(statusLabel, gbc);
@@ -136,6 +144,7 @@ public class ProfilePictureScreen extends JFrame {
         gbc.gridy = row++;
         form.add(progressBar, gbc);
 
+        // Buttons row 1
         gbc.gridy = row++;
         JPanel buttonsRow1 = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttonsRow1.setBackground(Color.WHITE);
@@ -143,15 +152,18 @@ public class ProfilePictureScreen extends JFrame {
         buttonsRow1.add(removeBtn);
         form.add(buttonsRow1, gbc);
 
+        // Buttons row 2
         gbc.gridy = row++;
         JPanel buttonsRow2 = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttonsRow2.setBackground(Color.WHITE);
         buttonsRow2.add(saveBtn);
         form.add(buttonsRow2, gbc);
 
+        // Link
         gbc.gridy = row++;
         form.add(maybeLaterBtn, gbc);
 
+        // Filler to keep everything top-aligned
         gbc.gridy = row++;
         gbc.weighty = 1;
         gbc.fill = GridBagConstraints.BOTH;
@@ -183,6 +195,7 @@ public class ProfilePictureScreen extends JFrame {
                 try {
                     dtde.acceptDrop(DnDConstants.ACTION_COPY);
                     Object data = dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+
                     if (data instanceof List) {
                         List<File> files = (List<File>) data;
                         if (!files.isEmpty()) {
@@ -230,7 +243,7 @@ public class ProfilePictureScreen extends JFrame {
         SwingWorker<BufferedImage, Void> worker = new SwingWorker<>() {
             @Override
             protected BufferedImage doInBackground() throws Exception {
-                Thread.sleep(600);
+                Thread.sleep(500);
                 BufferedImage img = ImageIO.read(file);
                 if (img == null) throw new IllegalArgumentException("Not an image");
                 return img;
@@ -267,6 +280,7 @@ public class ProfilePictureScreen extends JFrame {
         setError("Removed.");
     }
 
+    // ✅ female check must be before male (because "female" contains "male")
     private String genderKey() {
         String g = (gender == null) ? "" : gender.trim().toLowerCase();
         if (g.contains("female")) return "female";
@@ -274,59 +288,72 @@ public class ProfilePictureScreen extends JFrame {
         return "other";
     }
 
+    private static class DefaultPick {
+        final BufferedImage img;
+        final String name;
+        DefaultPick(BufferedImage img, String name) { this.img = img; this.name = name; }
+    }
+
+    private DefaultPick loadDefaultImage() throws Exception {
+        String[] candidates;
+
+        if (isCompany) {
+            candidates = new String[]{"default_company_logo.png", "default_logo.png", "company_logo.png"};
+        } else {
+            String key = genderKey();
+            if (key.equals("female")) candidates = new String[]{"default_female.png", "female.png"};
+            else if (key.equals("male")) candidates = new String[]{"default_male.png", "male.png"};
+            else candidates = new String[]{"default_other.png", "other.png"};
+        }
+
+        // 1) classpath: /images/...
+        for (String name : candidates) {
+            try (InputStream in = getClass().getResourceAsStream("/images/" + name)) {
+                if (in != null) {
+                    BufferedImage img = ImageIO.read(in);
+                    if (img != null) return new DefaultPick(img, name);
+                }
+            }
+        }
+
+        // 2) disk: resources/images/...
+        for (String name : candidates) {
+            File disk = new File("resources/images/" + name);
+            if (disk.exists()) {
+                BufferedImage img = ImageIO.read(disk);
+                if (img != null) return new DefaultPick(img, name);
+            }
+        }
+
+        throw new IllegalStateException("Default image not found");
+    }
+
     private void applyDefaultAndFinish() {
         setBusy(true, "Applying default...");
 
-        SwingWorker<BufferedImage, Void> worker = new SwingWorker<>() {
+        SwingWorker<DefaultPick, Void> worker = new SwingWorker<>() {
             @Override
-            protected BufferedImage doInBackground() throws Exception {
-                Thread.sleep(450);
+            protected DefaultPick doInBackground() throws Exception {
+                Thread.sleep(350);
+                DefaultPick pick = loadDefaultImage();
 
-                String[] candidates;
-
+                // ✅ Save to DB only for company
                 if (isCompany) {
-                    candidates = new String[]{"default_company_logo.png", "default_logo.png", "company_logo.png"};
-                } else {
-                    String key = genderKey();
-                    if (key.equals("female")) candidates = new String[]{"default_female.png", "female.png"};
-                    else if (key.equals("male")) candidates = new String[]{"default_male.png", "male.png"};
-                    else candidates = new String[]{"default_other.png", "other.png"};
+                    companyLogoService.applyDefaultLogo(email);
                 }
-
-                BufferedImage img = null;
-
-                for (String name : candidates) {
-                    try (InputStream in = getClass().getResourceAsStream("/images/" + name)) {
-                        if (in != null) {
-                            img = ImageIO.read(in);
-                            if (img != null) { defaultImageName = name; break; }
-                        }
-                    }
-                }
-
-                if (img == null) {
-                    for (String name : candidates) {
-                        File disk = new File("resources/images/" + name);
-                        if (disk.exists()) {
-                            img = ImageIO.read(disk);
-                            if (img != null) { defaultImageName = name; break; }
-                        }
-                    }
-                }
-
-                if (img == null) throw new IllegalStateException("Default not found");
-                return img;
+                return pick;
             }
 
             @Override
             protected void done() {
                 try {
-                    BufferedImage img = get();
+                    DefaultPick pick = get();
 
                     selectedImageFile = null;
                     usingDefaultImage = true;
+                    defaultImageName = pick.name;
 
-                    Image scaled = scaleToFit(img, DROP_W, DROP_H);
+                    Image scaled = scaleToFit(pick.img, DROP_W, DROP_H);
                     previewLabel.setText("");
                     previewLabel.setIcon(new ImageIcon(scaled));
 
@@ -343,34 +370,81 @@ public class ProfilePictureScreen extends JFrame {
                     dispose();
 
                 } catch (Exception ex) {
-                    setError("Default not found. Put default images in /images/ or resources/images/.");
+                    ex.printStackTrace();                 // ✅ print full error
+                    setError("Error: " + ex.getMessage()); // ✅ show real reason on UI
                 }
+
             }
         };
         worker.execute();
     }
 
     private void onSave() {
+        // Company: if nothing selected, auto default and finish
         if (selectedImageFile == null && !usingDefaultImage) {
             if (isCompany) {
-                applyDefaultAndFinish(); // auto-default company logo
-                return;
-            } else {
-                setError("Please upload a profile picture or click 'Maybe later'.");
+                applyDefaultAndFinish();
                 return;
             }
+            setError("Please upload a profile picture or click 'Maybe later'.");
+            return;
         }
 
+        // ✅ Company save = write file + update DB
+        if (isCompany) {
+            if (selectedImageFile == null) {
+                // rare case (shouldn’t happen normally), but handle it
+                applyDefaultAndFinish();
+                return;
+            }
+
+            setBusy(true, "Saving logo...");
+
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    companyLogoService.saveUploadedLogo(email, selectedImageFile);
+                    Thread.sleep(150);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        get();
+                        setBusy(false, "Saved.");
+
+                        JOptionPane.showMessageDialog(
+                                ProfilePictureScreen.this,
+                                "Company logo saved!",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE
+                        );
+
+                        new LoginScreen().setVisible(true);
+                        dispose();
+
+                    } catch (Exception ex) {
+                        setError("Save failed: " + ex.getMessage());
+                    }
+                }
+            };
+            worker.execute();
+            return;
+        }
+
+        // Student path (DB later)
         JOptionPane.showMessageDialog(
                 this,
-                (isCompany ? "Company logo saved!" : "Profile picture saved!"),
+                "Profile picture saved!",
                 "Success",
                 JOptionPane.INFORMATION_MESSAGE
         );
-
         new LoginScreen().setVisible(true);
         dispose();
     }
+
+    /* ---------- Header + UI helpers ---------- */
 
     private JPanel buildHeader(String subtitleText, java.awt.event.ActionListener backAction) {
         JPanel header = new JPanel() {
@@ -462,6 +536,8 @@ public class ProfilePictureScreen extends JFrame {
         return out;
     }
 
+    /* ---------- Buttons ---------- */
+
     static class InteractiveButton extends JButton {
         private final Color normal;
         private final Color hover;
@@ -490,7 +566,7 @@ public class ProfilePictureScreen extends JFrame {
         }
 
         @Override
-       	protected void paintComponent(Graphics g) {
+        protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
