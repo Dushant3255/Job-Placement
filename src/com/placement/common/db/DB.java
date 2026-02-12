@@ -103,6 +103,87 @@ public final class DB {
                 CREATE INDEX IF NOT EXISTS idx_otp_email_purpose
                 ON otp_codes(email, purpose);
             """);
+            
+            st.execute("""
+            		CREATE TABLE IF NOT EXISTS academic_details (
+            		  student_id INTEGER PRIMARY KEY,
+            		  program TEXT,
+            		  year_of_study INTEGER,
+            		  gpa REAL,
+            		  cgpa REAL,
+            		  backlogs INTEGER,
+            		  graduation_year INTEGER,
+            		  eligibility_status TEXT,
+            		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+            		);
+            		""");
+
+            		st.execute("""
+            		CREATE TABLE IF NOT EXISTS job_listings (
+            		  job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  company_name TEXT NOT NULL,
+            		  title TEXT NOT NULL,
+            		  department TEXT,
+            		  description TEXT,
+            		  min_gpa REAL,
+            		  min_year INTEGER,
+            		  eligibility_rule TEXT,
+            		  status TEXT NOT NULL DEFAULT 'OPEN',
+            		  posted_at TEXT NOT NULL DEFAULT (datetime('now'))
+            		);
+            		""");
+
+            		st.execute("""
+            		CREATE TABLE IF NOT EXISTS applications (
+            		  application_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  student_id INTEGER NOT NULL,
+            		  job_id INTEGER NOT NULL,
+            		  status TEXT NOT NULL DEFAULT 'APPLIED',
+            		  resume_path TEXT,
+            		  applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+            		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE,
+            		  FOREIGN KEY(job_id) REFERENCES job_listings(job_id) ON DELETE CASCADE
+            		);
+            		""");
+
+            		st.execute("""
+            		CREATE TABLE IF NOT EXISTS interviews (
+            		  interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  application_id INTEGER NOT NULL,
+            		  scheduled_at TEXT NOT NULL,
+            		  mode TEXT,
+            		  location TEXT,
+            		  status TEXT NOT NULL DEFAULT 'SCHEDULED',
+            		  notes TEXT,
+            		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+            		);
+            		""");
+
+            		st.execute("""
+            		CREATE TABLE IF NOT EXISTS offers (
+            		  offer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  application_id INTEGER NOT NULL,
+            		  package_lpa REAL,
+            		  joining_date TEXT,
+            		  status TEXT NOT NULL DEFAULT 'PENDING',
+            		  issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+            		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+            		);
+            		""");
+
+            		st.execute("""
+            		CREATE TABLE IF NOT EXISTS off_campus_jobs (
+            		  offcampus_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  student_id INTEGER NOT NULL,
+            		  company_name TEXT NOT NULL,
+            		  role_title TEXT NOT NULL,
+            		  applied_date TEXT,
+            		  status TEXT,
+            		  notes TEXT,
+            		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+            		);
+            		""");
+
 
             System.out.println("✅ DB initialized at: " + DB_FILE.getAbsolutePath());
 

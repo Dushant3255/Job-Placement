@@ -9,14 +9,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class OtpService {
-	
-	public static final String PURPOSE_STUDENT_SIGNUP = "STUDENT_SIGNUP";
-	public static final String PURPOSE_COMPANY_SIGNUP = "COMPANY_SIGNUP";
-	public static final String PURPOSE_FORGOT_PASSWORD = "FORGOT_PASSWORD";
-	public static final String PURPOSE_TWO_FACTOR = "TWO_FACTOR";
 
+    public static final String PURPOSE_STUDENT_SIGNUP = "STUDENT_SIGNUP";
+    public static final String PURPOSE_COMPANY_SIGNUP = "COMPANY_SIGNUP";
+    public static final String PURPOSE_FORGOT_PASSWORD = "FORGOT_PASSWORD";
+    public static final String PURPOSE_TWO_FACTOR = "TWO_FACTOR";
 
-    // ✅ temporary dev OTP
     public static final String TEST_OTP = "123456";
 
     private static final int EXPIRY_MINUTES = 10;
@@ -26,8 +24,8 @@ public class OtpService {
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final SecureRandom random = new SecureRandom();
 
-    // email sender (your gmail sender)
-    private final EmailService emailService = new EmailService();
+    // ✅ lazy init so test mode can run without env vars
+    private EmailService emailService;
 
     /** Set OTP_TEST_MODE=true (env var) OR -Dotp.test=true (VM arg) */
     public boolean isTestMode() {
@@ -42,29 +40,34 @@ public class OtpService {
         if (email == null || email.isBlank()) throw new IllegalArgumentException("Email required");
         if (purpose == null || purpose.isBlank()) throw new IllegalArgumentException("Purpose required");
 
+        String cleanEmail = email.trim();
+        String cleanPurpose = purpose.trim();
+
         String otp = isTestMode() ? TEST_OTP : generateOtp6();
 
         String expiresAt = LocalDateTime.now().plusMinutes(EXPIRY_MINUTES).format(fmt);
         String otpHash = PasswordUtil.hash(otp);
 
         // ✅ Always store in DB (even test mode)
-        otpDao.createOtp(email.trim(), purpose, otpHash, expiresAt);
+        otpDao.createOtp(cleanEmail, cleanPurpose, otpHash, expiresAt);
 
         // ✅ Test mode: do NOT send email
         if (isTestMode()) {
-            System.out.println("[OTP TEST MODE] OTP for " + email + " (" + purpose + ") = " + TEST_OTP);
+            System.out.println("[OTP TEST MODE] OTP for " + cleanEmail + " (" + cleanPurpose + ") = " + TEST_OTP);
             return;
         }
 
-        // ✅ Normal mode: send real email
+        // ✅ Normal mode: send real email (init only here)
+        if (emailService == null) emailService = new EmailService();
+
         String subject = "Your OTP Code";
         String body =
                 "Your OTP code is: " + otp + "\n\n" +
                 "It expires in " + EXPIRY_MINUTES + " minutes.\n" +
                 "If you did not request this, ignore this email.\n\n" +
-                "Purpose: " + purpose;
+                "Purpose: " + cleanPurpose;
 
-        emailService.send(email.trim(), subject, body);
+        emailService.send(cleanEmail, subject, body);
     }
 
     public boolean verifyOtp(String email, String purpose, String enteredOtp) throws SQLException {
@@ -72,7 +75,10 @@ public class OtpService {
         if (purpose == null || purpose.isBlank()) return false;
         if (enteredOtp == null || enteredOtp.isBlank()) return false;
 
-        OtpDao.OtpRow row = otpDao.findLatestActive(email.trim(), purpose);
+        String cleanEmail = email.trim();
+        String cleanPurpose = purpose.trim();
+
+        OtpDao.OtpRow row = otpDao.findLatestActive(cleanEmail, cleanPurpose);
         if (row == null) return false;
 
         if (row.attempts >= MAX_ATTEMPTS) return false;

@@ -9,6 +9,10 @@ import java.util.Locale;
 public final class FileStorageUtil {
     private FileStorageUtil() {}
 
+    /* =========================
+       COMPANY
+       ========================= */
+
     public static String saveCompanyLogo(File sourceFile, int userId) throws IOException {
         ensureDir("data/uploads/companies");
 
@@ -21,14 +25,13 @@ public final class FileStorageUtil {
         return normalize(dest);
     }
 
-    // ✅ Used by CompanyLogoService.applyDefaultLogo(email, defaultImageName)
+    // Used by CompanyLogoService.applyDefaultLogo(email, defaultImageName)
     public static String copyDefaultImageToCompanyUploads(String defaultImageName, int userId) throws IOException {
         ensureDir("data/uploads/companies");
 
-        // Keep a stable file name for default so repeated saves overwrite
         Path dest = Paths.get("data/uploads/companies", "company_" + userId + "_default.png");
 
-        // 1) try classpath: /images/<defaultImageName>
+        // 1) classpath: /images/<defaultImageName>
         try (InputStream in = FileStorageUtil.class.getResourceAsStream("/images/" + defaultImageName)) {
             if (in != null) {
                 Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
@@ -36,7 +39,7 @@ public final class FileStorageUtil {
             }
         }
 
-        // 2) try disk: resources/images/<defaultImageName>
+        // 2) disk: resources/images/<defaultImageName>
         Path disk = Paths.get("resources/images", defaultImageName);
         if (Files.exists(disk)) {
             Files.copy(disk, dest, StandardCopyOption.REPLACE_EXISTING);
@@ -46,10 +49,55 @@ public final class FileStorageUtil {
         throw new IOException("Default image not found: " + defaultImageName);
     }
 
-    // ✅ Optional: keep your old util method name if other code still calls it
+    // Optional legacy method
     public static String writeDefaultCompanyLogo(int userId) throws IOException {
         return copyDefaultImageToCompanyUploads("default_company_logo.png", userId);
     }
+
+    /* =========================
+       STUDENT
+       ========================= */
+ // ✅ Student: save uploaded profile image to data/uploads/students
+    public static String saveStudentProfileImage(File sourceFile, int userId) throws IOException {
+        ensureDir("data/uploads/students");
+
+        String ext = getExt(sourceFile.getName());
+        String fileName = "student_" + userId + "_" + System.currentTimeMillis() + "." + ext;
+
+        Path dest = Paths.get("data/uploads/students", fileName);
+        Files.copy(sourceFile.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+        return normalize(dest);
+    }
+
+    // ✅ Student: copy default image into student uploads and return saved path
+    public static String copyDefaultImageToStudentUploads(int userId, String defaultImageName) throws IOException {
+        ensureDir("data/uploads/students");
+
+        // stable default filename (overwrites if user clicks default again)
+        Path dest = Paths.get("data/uploads/students", "student_" + userId + "_default.png");
+
+        // 1) classpath: /images/<defaultImageName>
+        try (InputStream in = FileStorageUtil.class.getResourceAsStream("/images/" + defaultImageName)) {
+            if (in != null) {
+                Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
+                return normalize(dest);
+            }
+        }
+
+        // 2) disk: resources/images/<defaultImageName>
+        Path disk = Paths.get("resources/images", defaultImageName);
+        if (Files.exists(disk)) {
+            Files.copy(disk, dest, StandardCopyOption.REPLACE_EXISTING);
+            return normalize(dest);
+        }
+
+        throw new IOException("Default image not found: " + defaultImageName);
+    }
+
+    /* =========================
+       HELPERS
+       ========================= */
 
     private static void ensureDir(String dir) throws IOException {
         Files.createDirectories(Paths.get(dir));
