@@ -20,8 +20,7 @@ public class AccountVerificationService {
                     "Your account has been verified successfully. You can now sign in."
             );
         } catch (MessagingException ex) {
-            // Account is verified even if email sending fails.
-            // You can log this later.
+        	ex.printStackTrace();
         }
     }
 }
