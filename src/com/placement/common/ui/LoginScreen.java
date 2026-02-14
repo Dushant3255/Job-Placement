@@ -8,6 +8,7 @@ import java.awt.event.MouseEvent;
 
 import com.placement.common.model.UserRole;
 import com.placement.common.service.AuthService;
+import com.placement.admin.ui.AdminDashboard;
 
 public class LoginScreen extends JFrame {
 
@@ -208,6 +209,17 @@ public class LoginScreen extends JFrame {
                                 JOptionPane.INFORMATION_MESSAGE
                         );
 
+                        // ✅ Open Admin dashboard (integrated module)
+                        if (result.user.getRole() == UserRole.ADMIN) {
+                            new AdminDashboard(result.user).setVisible(true);
+                            dispose();
+                            return;
+                        }
+
+                        // TODO (next step): open dashboard by role
+                        // if (result.user.getRole() == UserRole.COMPANY) new CompanyDashboardScreen(...).setVisible(true);
+                        // else new StudentDashboardScreen(...).setVisible(true);
+                        // dispose();
                         if (result.user.getRole() == UserRole.COMPANY) {
                             new com.placement.company.ui.CompanyDashboardScreen(result.user.getUsername()).setVisible(true);
                         } else {
