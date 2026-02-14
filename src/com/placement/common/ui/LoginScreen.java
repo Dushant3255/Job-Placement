@@ -220,6 +220,13 @@ public class LoginScreen extends JFrame {
                         // if (result.user.getRole() == UserRole.COMPANY) new CompanyDashboardScreen(...).setVisible(true);
                         // else new StudentDashboardScreen(...).setVisible(true);
                         // dispose();
+                        if (result.user.getRole() == UserRole.COMPANY) {
+                            new com.placement.company.ui.CompanyDashboardScreen(result.user.getUsername()).setVisible(true);
+                        } else {
+                            // new StudentDashboardScreen(...).setVisible(true);
+                        }
+                        dispose();
+
 
                     } catch (Exception ex) {
                         signIn.setEnabled(true);
