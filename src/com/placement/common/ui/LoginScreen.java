@@ -208,10 +208,13 @@ public class LoginScreen extends JFrame {
                                 JOptionPane.INFORMATION_MESSAGE
                         );
 
-                        // TODO (next step): open dashboard by role
-                        // if (result.user.getRole() == UserRole.COMPANY) new CompanyDashboardScreen(...).setVisible(true);
-                        // else new StudentDashboardScreen(...).setVisible(true);
-                        // dispose();
+                        if (result.user.getRole() == UserRole.COMPANY) {
+                            new com.placement.company.ui.CompanyDashboardScreen(result.user.getUsername()).setVisible(true);
+                        } else {
+                            // new StudentDashboardScreen(...).setVisible(true);
+                        }
+                        dispose();
+
 
                     } catch (Exception ex) {
                         signIn.setEnabled(true);

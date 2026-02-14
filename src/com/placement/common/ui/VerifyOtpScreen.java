@@ -10,7 +10,7 @@ import java.awt.event.WindowEvent;
 
 import com.placement.student.ui.StudentCreateAccountScreen;
 import com.placement.company.ui.CompanyCreateAccountScreen;
-
+import com.placement.common.service.EmailService;
 import com.placement.common.dao.UserDao;
 import com.placement.common.model.User;
 import com.placement.common.service.OtpService;
@@ -293,6 +293,31 @@ public class VerifyOtpScreen extends JFrame {
                         String email = resolveEmailForOtp();
                         if (email != null) userDao.setVerifiedByEmail(email, true);
                     }
+                    
+                    if (purpose == Purpose.STUDENT_SIGNUP || purpose == Purpose.COMPANY_SIGNUP) {
+                        String email = resolveEmailForOtp();
+
+                        new SwingWorker<Void, Void>() {
+                            @Override
+                            protected Void doInBackground() {
+                                try {
+                                    if (email == null || email.isBlank()) return null;
+
+                                    User u = userDao.findByUsernameOrEmail(email);
+                                    String username = (u != null) ? u.getUsername() : "";
+                                    String role = (u != null && u.getRole() != null) ? u.getRole().name() : "USER";
+
+                                    EmailService mail = new EmailService();
+                                    mail.sendAccountCreatedEmail(email, username, role);
+
+                                } catch (Exception ex) {
+                                    ex.printStackTrace(); // IMPORTANT: don’t silently swallow send failures
+                                }
+                                return null;
+                            }
+                        }.execute();
+                    }
+
 
                     setBusy(false, "Verified!");
                     onVerifiedSuccess();
