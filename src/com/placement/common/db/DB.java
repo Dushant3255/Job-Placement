@@ -5,6 +5,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
+import com.placement.common.util.PasswordUtil;
 
 /**
  * SQLite DB helper.
@@ -184,6 +188,8 @@ public final class DB {
             		);
             		""");
 
+            // Seed a default admin user if none exists (so the Admin panel can be accessed)
+            seedDefaultAdmin(con);
 
             System.out.println("✅ DB initialized at: " + DB_FILE.getAbsolutePath());
 
@@ -198,6 +204,26 @@ public final class DB {
             if (!ok) {
                 throw new RuntimeException("Could not create DB folder: " + DB_DIR.getAbsolutePath());
             }
+        }
+    }
+
+    private static void seedDefaultAdmin(Connection con) throws SQLException {
+        String checkSql = "SELECT 1 FROM users WHERE role='ADMIN' LIMIT 1";
+        try (PreparedStatement ps = con.prepareStatement(checkSql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) return; // already has an admin
+        }
+
+        String insertSql = """
+            INSERT INTO users (role, username, email, password_hash, is_verified)
+            VALUES ('ADMIN', ?, ?, ?, 1)
+        """;
+
+        try (PreparedStatement ps = con.prepareStatement(insertSql)) {
+            ps.setString(1, "admin");
+            ps.setString(2, "admin@admin.com");
+            ps.setString(3, PasswordUtil.hash("admin123"));
+            ps.executeUpdate();
         }
     }
 }
