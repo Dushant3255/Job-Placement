@@ -9,6 +9,7 @@ import java.awt.event.MouseEvent;
 import com.placement.common.model.UserRole;
 import com.placement.common.service.AuthService;
 import com.placement.admin.ui.AdminDashboard;
+import com.placement.company.ui.CompanyDashboardScreen;
 
 public class LoginScreen extends JFrame {
 
