@@ -10,6 +10,9 @@ import com.placement.common.model.UserRole;
 import com.placement.common.service.AuthService;
 import com.placement.admin.ui.AdminDashboard;
 import com.placement.company.ui.CompanyDashboardScreen;
+import com.placement.company.dao.CompanyDao;
+import com.placement.company.model.CompanyProfile;
+
 
 public class LoginScreen extends JFrame {
 
@@ -217,16 +220,27 @@ public class LoginScreen extends JFrame {
                             return;
                         }
 
-                        // TODO (next step): open dashboard by role
-                        // if (result.user.getRole() == UserRole.COMPANY) new CompanyDashboardScreen(...).setVisible(true);
-                        // else new StudentDashboardScreen(...).setVisible(true);
-                        // dispose();
                         if (result.user.getRole() == UserRole.COMPANY) {
-                            new com.placement.company.ui.CompanyDashboardScreen(result.user.getUsername()).setVisible(true);
-                        } else {
-                            // new StudentDashboardScreen(...).setVisible(true);
+                            String displayCompanyName = result.user.getUsername(); // fallback
+
+                            try {
+                                CompanyProfile profile = new CompanyDao().findByUserId(result.user.getId());
+                                if (profile != null && profile.getCompanyName() != null && !profile.getCompanyName().isBlank()) {
+                                    displayCompanyName = profile.getCompanyName();
+                                }
+                            } catch (Exception ex) {
+                                // keep fallback name
+                            }
+
+                            com.placement.company.ui.CompanyDashboardScreen dash =
+                                    new com.placement.company.ui.CompanyDashboardScreen(displayCompanyName);
+
+                            dash.setExtendedState(JFrame.MAXIMIZED_BOTH);
+                            dash.setVisible(true);
+                            dispose();
+                            return;
                         }
-                        dispose();
+
 
 
                     } catch (Exception ex) {
