@@ -5,24 +5,19 @@ import com.placement.company.dao.CompanyJobDao;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 public class PostJobDialog extends JDialog {
 
-    // Match your dashboard theme (red -> pink)
     private static final Color GRAD_START = new Color(220, 38, 38);
     private static final Color GRAD_END   = new Color(244, 63, 94);
 
-    private final CompanyJobDao jobDao;
     private final String companyName;
+    private final CompanyJobDao jobDao;
     private final Runnable onSuccess;
 
-    private JTextField titleField;
-    private JTextField deptField;
-    private JTextField minGpaField;
-    private JTextField minYearField;
-    private JTextField ruleField;
-
-    // ✅ Description as TEXT AREA like admin
+    private JTextField titleField, deptField, minGpaField, minYearField, ruleField;
     private JTextArea descArea;
 
     private JButton postBtn;
@@ -33,7 +28,7 @@ public class PostJobDialog extends JDialog {
         this.jobDao = jobDao;
         this.onSuccess = onSuccess;
 
-        setSize(650, 560);
+        setSize(720, 620);
         setLocationRelativeTo(owner);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
@@ -62,16 +57,15 @@ public class PostJobDialog extends JDialog {
                 g2.dispose();
             }
         };
-        header.setPreferredSize(new Dimension(650, 95));
+        header.setPreferredSize(new Dimension(720, 120));
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.setBorder(new EmptyBorder(18, 18, 18, 18));
-        header.setOpaque(false);
 
         JLabel t = new JLabel("Post New Job");
         t.setForeground(Color.WHITE);
         t.setFont(new Font("Segoe UI", Font.BOLD, 20));
 
-        JLabel sub = new JLabel("Company: " + companyName);
+        JLabel sub = new JLabel("Create a job listing for " + (companyName == null ? "Company" : companyName));
         sub.setForeground(new Color(255, 235, 240));
         sub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 
@@ -84,7 +78,7 @@ public class PostJobDialog extends JDialog {
     private JComponent buildForm() {
         JPanel form = new JPanel(new GridBagLayout());
         form.setBackground(Color.WHITE);
-        form.setBorder(new EmptyBorder(18, 18, 12, 18));
+        form.setBorder(new EmptyBorder(18, 18, 10, 18));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
@@ -92,10 +86,10 @@ public class PostJobDialog extends JDialog {
         gbc.anchor = GridBagConstraints.NORTHWEST;
 
         titleField = new JTextField();
-        deptField = new JTextField();
+        deptField  = new JTextField();
         minGpaField = new JTextField();
         minYearField = new JTextField();
-        ruleField = new JTextField("GENERAL");
+        ruleField = new JTextField();
 
         styleField(titleField);
         styleField(deptField);
@@ -103,7 +97,6 @@ public class PostJobDialog extends JDialog {
         styleField(minYearField);
         styleField(ruleField);
 
-        // ✅ Description area (admin-like)
         descArea = new JTextArea(8, 30);
         descArea.setLineWrap(true);
         descArea.setWrapStyleWord(true);
@@ -116,22 +109,78 @@ public class PostJobDialog extends JDialog {
         descScroll.setBorder(BorderFactory.createLineBorder(new Color(220, 226, 235), 1, true));
 
         int y = 0;
-
         addRow(form, gbc, y++, "Title *", titleField);
         addRow(form, gbc, y++, "Department", deptField);
         addRow(form, gbc, y++, "Min GPA", minGpaField);
         addRow(form, gbc, y++, "Min Year", minYearField);
         addRow(form, gbc, y++, "Eligibility Rule", ruleField);
 
-        // Description row (taller)
-        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0; gbc.weighty = 0;
+        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
         form.add(new JLabel("Description"), gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1; gbc.weighty = 1;
+        gbc.gridx = 1; gbc.weightx = 1;
         gbc.fill = GridBagConstraints.BOTH;
+        gbc.weighty = 1;
         form.add(descScroll, gbc);
 
         return form;
+    }
+
+    private JComponent buildFooter() {
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(new EmptyBorder(0, 12, 12, 12));
+
+        JButton cancel = new SoftButton("Cancel", new Color(226, 232, 240), new Color(15, 23, 42));
+        cancel.addActionListener(e -> dispose());
+
+        postBtn = new GradientButton("Post Job", GRAD_START, GRAD_END);
+        postBtn.addActionListener(e -> onPost());
+
+        footer.add(cancel);
+        footer.add(postBtn);
+        return footer;
+    }
+
+    private void onPost() {
+        String title = titleField.getText().trim();
+        if (title.isBlank()) {
+            JOptionPane.showMessageDialog(this, "Title is required.", "Validation", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String dept = deptField.getText().trim();
+        String desc = descArea.getText().trim();
+        String rule = ruleField.getText().trim();
+
+        Double minGpa = parseDoubleOrNull(minGpaField.getText().trim());
+        Integer minYear = parseIntOrNull(minYearField.getText().trim());
+
+        postBtn.setEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
+        new SwingWorker<Long, Void>() {
+            @Override protected Long doInBackground() {
+                return jobDao.insertJob(companyName, title, dept, desc, minGpa, minYear, rule);
+            }
+
+            @Override protected void done() {
+                try {
+                    long id = get();
+                    if (id <= 0) throw new RuntimeException("Insert failed.");
+
+                    JOptionPane.showMessageDialog(PostJobDialog.this, "Job posted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    if (onSuccess != null) onSuccess.run();
+                    dispose();
+
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(PostJobDialog.this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    postBtn.setEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        }.execute();
     }
 
     private void addRow(JPanel form, GridBagConstraints gbc, int y, String label, JComponent field) {
@@ -153,80 +202,81 @@ public class PostJobDialog extends JDialog {
         ));
     }
 
-    private JComponent buildFooter() {
-        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
-        footer.setBackground(Color.WHITE);
-        footer.setBorder(new EmptyBorder(0, 12, 8, 12));
-
-        JButton cancel = new JButton("Cancel");
-        cancel.addActionListener(e -> dispose());
-
-        postBtn = new JButton("Post Job");
-        postBtn.setBackground(GRAD_START);
-        postBtn.setForeground(Color.WHITE);
-        postBtn.setFocusPainted(false);
-        postBtn.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
-        postBtn.addActionListener(e -> onPost());
-
-        footer.add(cancel);
-        footer.add(postBtn);
-        return footer;
-    }
-
-    private void onPost() {
-        String title = titleField.getText().trim();
-        if (title.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Title is required.", "Validation", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        String dept = deptField.getText().trim();
-        String desc = descArea.getText().trim();
-        String rule = ruleField.getText().trim();
-
-        Double minGpa = parseDoubleOrNull(minGpaField.getText().trim());
-        Integer minYear = parseIntOrNull(minYearField.getText().trim());
-
-        postBtn.setEnabled(false);
-        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-        new SwingWorker<Long, Void>() {
-            @Override
-            protected Long doInBackground() {
-                return jobDao.insertJob(companyName, title, dept, desc, minGpa, minYear, rule);
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    long id = get();
-                    if (id <= 0) {
-                        JOptionPane.showMessageDialog(PostJobDialog.this, "Failed to create job.", "Error", JOptionPane.ERROR_MESSAGE);
-                        return;
-                    }
-
-                    JOptionPane.showMessageDialog(PostJobDialog.this, "Job posted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-
-                    if (onSuccess != null) onSuccess.run();
-                    dispose();
-
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(PostJobDialog.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                } finally {
-                    postBtn.setEnabled(true);
-                    setCursor(Cursor.getDefaultCursor());
-                }
-            }
-        }.execute();
-    }
-
     private Double parseDoubleOrNull(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Double.parseDouble(s); } catch (Exception e) { return null; }
     }
-
     private Integer parseIntOrNull(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Integer.parseInt(s); } catch (Exception e) { return null; }
+    }
+
+    /* ================= Buttons (same style family as dashboard) ================= */
+
+    private static class SoftButton extends JButton {
+        private final int radius = 18;
+
+        SoftButton(String text, Color bg, Color fg) {
+            super(text);
+            setFont(new Font("Segoe UI", Font.BOLD, 13));
+            setForeground(fg);
+            setBackground(bg);
+            setFocusPainted(false);
+            setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setContentAreaFilled(false);
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getBackground());
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), radius, radius);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class GradientButton extends JButton {
+        private final int radius = 18;
+        private final Color start;
+        private final Color end;
+        private boolean hover = false;
+
+        GradientButton(String text, Color start, Color end) {
+            super(text);
+            this.start = start;
+            this.end = end;
+
+            setFont(new Font("Segoe UI", Font.BOLD, 13));
+            setForeground(Color.WHITE);
+            setFocusPainted(false);
+            setBorder(BorderFactory.createEmptyBorder(10, 16, 10, 16));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setContentAreaFilled(false);
+            setOpaque(false);
+
+            addMouseListener(new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
+                @Override public void mouseExited(MouseEvent e) { hover = false; repaint(); }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            Color s = hover ? start.brighter() : start;
+            Color e = hover ? end.brighter() : end;
+
+            g2.setPaint(new GradientPaint(0, 0, s, getWidth(), getHeight(), e));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), radius, radius);
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
     }
 }
