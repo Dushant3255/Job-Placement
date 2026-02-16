@@ -1,9 +1,15 @@
 package com.placement.company.ui;
 
 import com.placement.common.ui.LoginScreen;
+import com.placement.company.dao.CompanyJobDao;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -13,14 +19,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Company dashboard UI (dummy data).
- * - Header gradient matches LoginScreen.
- * - Stats cards (dummy numbers).
- * - Job listings (dummy cards) with sensible actions.
+ * Company dashboard UI (DB connected).
+ * - Loads jobs from SQLite job_listings via CompanyJobDao
+ * - Updates stats cards from DB
+ * - Close/Reopen updates DB and refreshes UI
+ * - Search + status filter + cards/table toggle
+ *
+ * FIXED: Uses CompanyJobDao.JobRow everywhere (no inner JobRow type mismatch).
  */
 public class CompanyDashboardScreen extends JFrame {
 
-    // Match LoginScreen header gradient
+    // CompanyCreateAccountScreen theme (red -> pink)
     private static final Color GRAD_START = new Color(220, 38, 38);
     private static final Color GRAD_END   = new Color(244, 63, 94);
 
@@ -28,6 +37,37 @@ public class CompanyDashboardScreen extends JFrame {
     private static final Color TEXT_MUTED = new Color(90, 98, 112);
 
     private final String companyName;
+    private final CompanyJobDao jobDao = new CompanyJobDao();
+
+    // stats cards so we can update values after loading
+    private StatCard activeJobsCard;
+    private StatCard totalApplicantsCard;
+    private StatCard offersMadeCard;
+    private StatCard pendingReviewsCard;
+
+    private JButton refreshBtn;
+
+    // --- Jobs state / UI (Search + Cards/Table) ---
+    private final List<CompanyJobDao.JobRow> allJobs = new ArrayList<>();
+    private final List<CompanyJobDao.JobRow> filteredJobs = new ArrayList<>();
+
+    private JTextField jobSearchField;
+    private JComboBox<String> statusFilter;
+
+    private CardLayout jobsViewLayout;
+    private JPanel jobsViewPanel;
+
+    private JPanel jobsCardsList; // cards container
+
+    private JTable jobsTable;
+    private DefaultTableModel jobsTableModel;
+
+    private JButton tableViewApplicantsBtn;
+    private JButton tableEditBtn;
+    private JButton tableToggleBtn;
+
+    private static final String VIEW_CARDS = "CARDS";
+    private static final String VIEW_TABLE = "TABLE";
 
     public CompanyDashboardScreen() {
         this("Tech Innovations Inc.");
@@ -35,11 +75,13 @@ public class CompanyDashboardScreen extends JFrame {
 
     public CompanyDashboardScreen(String companyName) {
         this.companyName = (companyName == null || companyName.isBlank()) ? "Company" : companyName;
+
         setTitle("Company Dashboard - Student Placement Portal");
         setSize(1100, 720);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(980, 650));
+
         initUI();
     }
 
@@ -84,7 +126,7 @@ public class CompanyDashboardScreen extends JFrame {
         title.setFont(new Font("Segoe UI", Font.BOLD, 24));
 
         JLabel subtitle = new JLabel("Recruitment Management Portal");
-        subtitle.setForeground(new Color(235, 235, 255));
+        subtitle.setForeground(new Color(255, 240, 245));
         subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
 
         titles.add(title);
@@ -129,9 +171,7 @@ public class CompanyDashboardScreen extends JFrame {
         content.add(Box.createVerticalStrut(16));
         content.add(buildStats());
         content.add(Box.createVerticalStrut(18));
-        content.add(buildJobsHeader());
-        content.add(Box.createVerticalStrut(10));
-        content.add(buildJobsList());
+        content.add(buildJobsSection());
 
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -164,69 +204,366 @@ public class CompanyDashboardScreen extends JFrame {
         JPanel grid = new JPanel(new GridLayout(1, 4, 14, 14));
         grid.setOpaque(false);
 
-        grid.add(new StatCard("Active Jobs", "8", new Color(239, 246, 255)));
-        grid.add(new StatCard("Total Applicants", "124", new Color(236, 253, 245)));
-        grid.add(new StatCard("Offers Made", "15", new Color(245, 243, 255)));
-        grid.add(new StatCard("Pending Reviews", "32", new Color(255, 247, 237)));
-        
-        // ✅ make the entire row taller
-        grid.setPreferredSize(new Dimension(0, 105));
-        grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 105));
-        
+        activeJobsCard = new StatCard("Active Jobs", "—", new Color(239, 246, 255));
+        totalApplicantsCard = new StatCard("Total Applicants", "—", new Color(236, 253, 245));
+        offersMadeCard = new StatCard("Offers Made", "—", new Color(245, 243, 255));
+        pendingReviewsCard = new StatCard("Pending Reviews", "—", new Color(255, 247, 237));
+
+        grid.add(activeJobsCard);
+        grid.add(totalApplicantsCard);
+        grid.add(offersMadeCard);
+        grid.add(pendingReviewsCard);
+
+        grid.setPreferredSize(new Dimension(0, 112));
+        grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 112));
+
         return grid;
     }
 
-    private JComponent buildJobsHeader() {
-        JPanel row = new JPanel(new BorderLayout());
-        row.setOpaque(false);
+    /* ============================= Jobs Section ============================= */
+
+    private JComponent buildJobsSection() {
+        JPanel section = new JPanel();
+        section.setOpaque(false);
+        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
 
         JLabel title = new JLabel("Job Listings");
         title.setFont(new Font("Segoe UI", Font.BOLD, 16));
         title.setForeground(new Color(25, 30, 45));
+        top.add(title, BorderLayout.WEST);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        actions.setOpaque(false);
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        controls.setOpaque(false);
 
-        JButton refresh = new SoftButton("Refresh", new Color(226, 232, 240), new Color(15, 23, 42));
-        refresh.addActionListener(e -> JOptionPane.showMessageDialog(this, "(Dummy) Refresh jobs"));
+        jobSearchField = new JTextField(18);
+        jobSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        jobSearchField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(220, 226, 235), 1, true),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)
+        ));
+        jobSearchField.setToolTipText("Search title / dept / description");
+
+        statusFilter = new JComboBox<>(new String[]{"All", "OPEN", "CLOSED"});
+        statusFilter.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+
+        RoundedToggleButton cardsBtn = new RoundedToggleButton("Cards");
+        RoundedToggleButton tableBtn = new RoundedToggleButton("Table");
+        ButtonGroup viewGroup = new ButtonGroup();
+        viewGroup.add(cardsBtn);
+        viewGroup.add(tableBtn);
+        cardsBtn.setSelected(true);
+        updateToggleStyles(cardsBtn, tableBtn);
+
+        cardsBtn.addActionListener(e -> {
+            updateToggleStyles(cardsBtn, tableBtn);
+            jobsViewLayout.show(jobsViewPanel, VIEW_CARDS);
+        });
+
+        tableBtn.addActionListener(e -> {
+            updateToggleStyles(cardsBtn, tableBtn);
+            jobsViewLayout.show(jobsViewPanel, VIEW_TABLE);
+        });
+
+        refreshBtn = new SoftButton("Refresh", new Color(226, 232, 240), new Color(15, 23, 42));
+        refreshBtn.addActionListener(e -> loadFromDb());
 
         JButton post = new SolidButton("+ Post New Job", GRAD_START);
-        post.addActionListener(e -> JOptionPane.showMessageDialog(this, "(Dummy) Open Post Job form"));
+        post.addActionListener(e -> {
+            PostJobDialog dlg = new PostJobDialog(
+                    CompanyDashboardScreen.this,
+                    companyName,
+                    jobDao,
+                    this::loadFromDb
+            );
+            dlg.setVisible(true);
+        });
 
-        actions.add(refresh);
-        actions.add(post);
+        controls.add(jobSearchField);
+        controls.add(statusFilter);
+        controls.add(cardsBtn);
+        controls.add(tableBtn);
+        controls.add(refreshBtn);
+        controls.add(post);
 
-        row.add(title, BorderLayout.WEST);
-        row.add(actions, BorderLayout.EAST);
-        return row;
+        top.add(controls, BorderLayout.EAST);
+
+        section.add(top);
+        section.add(Box.createVerticalStrut(10));
+
+        jobsViewLayout = new CardLayout();
+        jobsViewPanel = new JPanel(jobsViewLayout);
+        jobsViewPanel.setOpaque(false);
+
+        jobsViewPanel.add(buildCardsView(), VIEW_CARDS);
+        jobsViewPanel.add(buildTableView(), VIEW_TABLE);
+
+        section.add(jobsViewPanel);
+
+        // Load real data
+        loadFromDb();
+
+        // Listeners
+        jobSearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
+            @Override public void removeUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
+            @Override public void changedUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
+        });
+
+        statusFilter.addActionListener(e -> applyJobFiltersAndRefreshUI());
+
+        return section;
     }
 
-    private JComponent buildJobsList() {
-        JPanel list = new JPanel();
-        list.setOpaque(false);
-        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+    private void openEditJob(CompanyJobDao.JobRow job) {
+        if (job == null) return;
 
-        List<JobRow> jobs = dummyJobs();
-        for (int i = 0; i < jobs.size(); i++) {
-            list.add(new JobCard(jobs.get(i)));
-            if (i < jobs.size() - 1) list.add(Box.createVerticalStrut(12));
+        EditJobDialog dlg = new EditJobDialog(
+                this,
+                companyName,
+                jobDao,
+                job,
+                this::loadFromDb
+        );
+        dlg.setVisible(true);
+    }
+
+    private void updateToggleStyles(RoundedToggleButton cardsBtn, RoundedToggleButton tableBtn) {
+        if (cardsBtn.isSelected()) {
+            cardsBtn.setBg(GRAD_START, Color.WHITE);
+            tableBtn.setBg(Color.WHITE, new Color(15, 23, 42));
+        } else {
+            tableBtn.setBg(GRAD_START, Color.WHITE);
+            cardsBtn.setBg(Color.WHITE, new Color(15, 23, 42));
+        }
+    }
+
+    private JComponent buildCardsView() {
+        jobsCardsList = new JPanel();
+        jobsCardsList.setOpaque(false);
+        jobsCardsList.setLayout(new BoxLayout(jobsCardsList, BoxLayout.Y_AXIS));
+        return jobsCardsList;
+    }
+
+    private JComponent buildTableView() {
+        jobsTableModel = new DefaultTableModel(new Object[]{"Title", "Department", "Posted", "Status"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+
+        jobsTable = new JTable(jobsTableModel);
+        jobsTable.setRowHeight(34);
+        jobsTable.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        jobsTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+        jobsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        JScrollPane sp = new JScrollPane(jobsTable);
+        sp.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 243), 1, true));
+        sp.setPreferredSize(new Dimension(0, 280));
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        actions.setOpaque(false);
+
+        tableViewApplicantsBtn = new SoftButton("View Applicants", new Color(226, 232, 240), new Color(15, 23, 42));
+        tableEditBtn = new SoftButton("Edit", new Color(237, 233, 254), new Color(79, 70, 229));
+        tableToggleBtn = new SolidButton("Close", new Color(234, 88, 12));
+
+        tableViewApplicantsBtn.setEnabled(false);
+        tableEditBtn.setEnabled(false);
+        tableToggleBtn.setEnabled(false);
+
+        tableViewApplicantsBtn.addActionListener(e -> openApplicants(selectedTableJob()));
+        tableEditBtn.addActionListener(e -> openEditJob(selectedTableJob()));
+
+        // DB UPDATE on toggle
+        tableToggleBtn.addActionListener(e -> {
+            CompanyJobDao.JobRow job = selectedTableJob();
+            if (job == null) return;
+
+            String cur = (job.status == null) ? "OPEN" : job.status;
+            String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
+
+            boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+            if (!ok) {
+                JOptionPane.showMessageDialog(this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            loadFromDb();
+        });
+
+        actions.add(tableViewApplicantsBtn);
+        actions.add(tableEditBtn);
+        actions.add(tableToggleBtn);
+
+        jobsTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+            @Override
+            public void valueChanged(ListSelectionEvent e) {
+                if (e.getValueIsAdjusting()) return;
+                updateTableActionButtons();
+            }
+        });
+
+        JPanel wrap = new JPanel();
+        wrap.setOpaque(false);
+        wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
+        wrap.add(sp);
+        wrap.add(actions);
+
+        return wrap;
+    }
+
+    private void loadFromDb() {
+        if (refreshBtn != null) refreshBtn.setEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
+        new SwingWorker<LoadedData, Void>() {
+            @Override
+            protected LoadedData doInBackground() {
+                LoadedData d = new LoadedData();
+                d.jobs = jobDao.listByCompanyName(companyName);
+                d.activeJobs = jobDao.countActiveJobs(companyName);
+                d.totalApplicants = jobDao.countTotalApplicants(companyName);
+                d.offersMade = jobDao.countOffersMade(companyName);
+                d.pendingReviews = jobDao.countPendingReviews(companyName);
+                return d;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    LoadedData d = get();
+
+                    allJobs.clear();
+                    if (d.jobs != null) allJobs.addAll(d.jobs);
+
+                    // Update stats
+                    activeJobsCard.setValue(String.valueOf(d.activeJobs));
+                    totalApplicantsCard.setValue(String.valueOf(d.totalApplicants));
+                    offersMadeCard.setValue(String.valueOf(d.offersMade));
+                    pendingReviewsCard.setValue(String.valueOf(d.pendingReviews));
+
+                    applyJobFiltersAndRefreshUI();
+
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(
+                            CompanyDashboardScreen.this,
+                            "Failed to load from DB: " + (ex.getMessage() == null ? "" : ex.getMessage()),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                    );
+                } finally {
+                    if (refreshBtn != null) refreshBtn.setEnabled(true);
+                    setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        }.execute();
+    }
+
+    private static class LoadedData {
+        List<CompanyJobDao.JobRow> jobs;
+        int activeJobs;
+        int totalApplicants;
+        int offersMade;
+        int pendingReviews;
+    }
+
+    private void applyJobFiltersAndRefreshUI() {
+        String q = (jobSearchField == null) ? "" : jobSearchField.getText().trim().toLowerCase();
+        String status = (statusFilter == null) ? "All" : String.valueOf(statusFilter.getSelectedItem());
+
+        filteredJobs.clear();
+
+        for (CompanyJobDao.JobRow j : allJobs) {
+            boolean statusOk = status.equals("All") || (j.status != null && j.status.equalsIgnoreCase(status));
+            if (!statusOk) continue;
+
+            if (q.isEmpty()) {
+                filteredJobs.add(j);
+                continue;
+            }
+
+            String hay =
+                    (j.title == null ? "" : j.title.toLowerCase()) + " " +
+                    (j.department == null ? "" : j.department.toLowerCase()) + " " +
+                    (j.description == null ? "" : j.description.toLowerCase());
+
+            if (hay.contains(q)) filteredJobs.add(j);
         }
 
-        return list;
+        rebuildCardsUI();
+        rebuildTableUI();
+        updateTableActionButtons();
     }
 
-    private List<JobRow> dummyJobs() {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd MMM yyyy");
-        List<JobRow> out = new ArrayList<>();
-        out.add(new JobRow("Software Engineer (Java)", "Engineering", "OPEN", LocalDate.now().minusDays(2).format(fmt),
-                "Build and maintain backend services. Swing UI integration a plus."));
-        out.add(new JobRow("UI/UX Intern", "Design", "OPEN", LocalDate.now().minusDays(5).format(fmt),
-                "Assist in improving the portal UI and user flows."));
-        out.add(new JobRow("Data Analyst", "Analytics", "CLOSED", LocalDate.now().minusDays(14).format(fmt),
-                "Analyze placement trends and generate weekly reports."));
-        out.add(new JobRow("DevOps Engineer", "Infrastructure", "OPEN", LocalDate.now().minusDays(21).format(fmt),
-                "CI/CD pipelines, monitoring, and release automation."));
-        return out;
+    private void rebuildCardsUI() {
+        if (jobsCardsList == null) return;
+
+        jobsCardsList.removeAll();
+
+        if (filteredJobs.isEmpty()) {
+            JLabel empty = new JLabel("No jobs found.");
+            empty.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            empty.setForeground(TEXT_MUTED);
+            empty.setBorder(new EmptyBorder(12, 4, 12, 4));
+            jobsCardsList.add(empty);
+        } else {
+            for (int i = 0; i < filteredJobs.size(); i++) {
+                jobsCardsList.add(new JobCard(filteredJobs.get(i)));
+                if (i < filteredJobs.size() - 1) jobsCardsList.add(Box.createVerticalStrut(12));
+            }
+        }
+
+        jobsCardsList.revalidate();
+        jobsCardsList.repaint();
+    }
+
+    private void rebuildTableUI() {
+        if (jobsTableModel == null) return;
+
+        jobsTableModel.setRowCount(0);
+        for (CompanyJobDao.JobRow j : filteredJobs) {
+            jobsTableModel.addRow(new Object[]{
+                    j.title,
+                    j.department,
+                    formatPosted(j.postedAt),
+                    j.status
+            });
+        }
+    }
+
+    private CompanyJobDao.JobRow selectedTableJob() {
+        if (jobsTable == null) return null;
+        int row = jobsTable.getSelectedRow();
+        if (row < 0 || row >= filteredJobs.size()) return null;
+        return filteredJobs.get(row);
+    }
+
+    private void updateTableActionButtons() {
+        CompanyJobDao.JobRow job = selectedTableJob();
+        boolean has = job != null;
+
+        if (tableViewApplicantsBtn != null) tableViewApplicantsBtn.setEnabled(has);
+        if (tableEditBtn != null) tableEditBtn.setEnabled(has);
+        if (tableToggleBtn != null) tableToggleBtn.setEnabled(has);
+
+        if (!has || tableToggleBtn == null) return;
+
+        boolean open = job.status != null && job.status.equalsIgnoreCase("OPEN");
+        tableToggleBtn.setText(open ? "Close" : "Reopen");
+        tableToggleBtn.setBackground(open ? new Color(234, 88, 12) : GRAD_START);
+        tableToggleBtn.repaint();
+    }
+
+    private static String formatPosted(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        try {
+            String datePart = raw.length() >= 10 ? raw.substring(0, 10) : raw; // YYYY-MM-DD
+            LocalDate d = LocalDate.parse(datePart);
+            return d.format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
+        } catch (Exception e) {
+            return raw;
+        }
     }
 
     private JComponent wrapAsCard(JComponent inner) {
@@ -237,7 +574,14 @@ public class CompanyDashboardScreen extends JFrame {
         return card;
     }
 
-    /* ----------------------------- Components ----------------------------- */
+    private void openApplicants(CompanyJobDao.JobRow job) {
+        if (job == null) return;
+
+        ApplicantsScreen screen = new ApplicantsScreen(this, companyName, job.jobId, job.title);
+        screen.setVisible(true);
+    }
+
+    /* ============================= Components ============================= */
 
     private static class GradientPanel extends JPanel {
         private final Color start;
@@ -282,6 +626,8 @@ public class CompanyDashboardScreen extends JFrame {
     }
 
     private static class StatCard extends RoundedPanel {
+        private final JLabel big;
+
         StatCard(String label, String value, Color bg) {
             super(18, bg);
             setLayout(new BorderLayout());
@@ -291,12 +637,16 @@ public class CompanyDashboardScreen extends JFrame {
             top.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             top.setForeground(new Color(55, 65, 81));
 
-            JLabel big = new JLabel(value);
-            big.setFont(new Font("Segoe UI", Font.BOLD, 28));
+            big = new JLabel(value);
+            big.setFont(new Font("Segoe UI", Font.BOLD, 30));
             big.setForeground(new Color(15, 23, 42));
 
             add(top, BorderLayout.NORTH);
             add(big, BorderLayout.WEST);
+        }
+
+        void setValue(String v) {
+            big.setText(v == null ? "—" : v);
         }
     }
 
@@ -352,6 +702,46 @@ public class CompanyDashboardScreen extends JFrame {
         }
     }
 
+    private static class RoundedToggleButton extends JToggleButton {
+        private final int radius = 18;
+        private Color bg = Color.WHITE;
+        private Color fg = new Color(15, 23, 42);
+
+        RoundedToggleButton(String text) {
+            super(text);
+            setFont(new Font("Segoe UI", Font.BOLD, 12));
+            setFocusPainted(false);
+            setBorder(BorderFactory.createEmptyBorder(9, 12, 9, 12));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setContentAreaFilled(false);
+            setOpaque(false);
+            setBg(Color.WHITE, fg);
+        }
+
+        void setBg(Color bg, Color fg) {
+            this.bg = bg;
+            this.fg = fg;
+            setForeground(fg);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(bg);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), radius, radius);
+
+            if (!isSelected()) {
+                g2.setColor(new Color(220, 226, 235));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            }
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
     private static class OutlineButton extends JButton {
         OutlineButton(String text) {
             super(text);
@@ -385,34 +775,16 @@ public class CompanyDashboardScreen extends JFrame {
         }
     }
 
-    private static class JobRow {
-        final String title;
-        final String dept;
-        final String status;
-        final String posted;
-        final String summary;
-
-        JobRow(String title, String dept, String status, String posted, String summary) {
-            this.title = title;
-            this.dept = dept;
-            this.status = status;
-            this.posted = posted;
-            this.summary = summary;
-        }
-    }
-
     private class JobCard extends RoundedPanel {
-        JobCard(JobRow job) {
+        JobCard(CompanyJobDao.JobRow job) {
             super(18, Color.WHITE);
             setLayout(new BorderLayout());
             setBorder(new EmptyBorder(14, 16, 14, 16));
 
-            // ---- Left (info) ----
             JPanel info = new JPanel();
             info.setOpaque(false);
             info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
 
-            // Title row: title + status pill
             JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
             titleRow.setOpaque(false);
 
@@ -421,17 +793,16 @@ public class CompanyDashboardScreen extends JFrame {
             title.setForeground(new Color(15, 23, 42));
 
             JLabel status = buildStatusPill(job.status);
-
             titleRow.add(title);
             titleRow.add(status);
 
-            JLabel meta = new JLabel(job.dept + "  |  Posted: " + job.posted);
+            String deptText = (job.department == null || job.department.isBlank()) ? "—" : job.department;
+            JLabel meta = new JLabel(deptText + "  |  Posted: " + formatPosted(job.postedAt));
             meta.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             meta.setForeground(TEXT_MUTED);
             meta.setBorder(new EmptyBorder(6, 0, 0, 0));
 
-            // wrapped summary using HTML (cleaner than JTextArea)
-            JLabel summary = new JLabel("<html><div style='width:520px;'>" + escapeHtml(job.summary) + "</div></html>");
+            JLabel summary = new JLabel("<html><div style='width:520px;'>" + escapeHtml(job.description) + "</div></html>");
             summary.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             summary.setForeground(new Color(55, 65, 81));
             summary.setBorder(new EmptyBorder(8, 0, 0, 0));
@@ -440,7 +811,6 @@ public class CompanyDashboardScreen extends JFrame {
             info.add(meta);
             info.add(summary);
 
-            // ---- Right (buttons) ----
             JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
             actions.setOpaque(false);
 
@@ -450,26 +820,28 @@ public class CompanyDashboardScreen extends JFrame {
             JButton edit = new SoftButton("Edit", new Color(237, 233, 254), new Color(79, 70, 229));
             edit.setPreferredSize(new Dimension(70, 38));
 
-            JButton toggle = new SolidButton(
-                    job.status.equalsIgnoreCase("OPEN") ? "Close" : "Reopen",
-                    job.status.equalsIgnoreCase("OPEN") ? new Color(234, 88, 12) : GRAD_START
-            );
-            toggle.setPreferredSize(new Dimension(85, 38));
+            boolean open = job.status != null && job.status.equalsIgnoreCase("OPEN");
+            JButton toggle = new SolidButton(open ? "Close" : "Reopen", open ? new Color(234, 88, 12) : GRAD_START);
+            toggle.setPreferredSize(new Dimension(90, 38));
 
-            applicants.addActionListener(e -> JOptionPane.showMessageDialog(
-                    CompanyDashboardScreen.this, "(Dummy) Applicants for: " + job.title));
+            applicants.addActionListener(e -> openApplicants(job));
+            edit.addActionListener(e -> openEditJob(job));
 
-            edit.addActionListener(e -> JOptionPane.showMessageDialog(
-                    CompanyDashboardScreen.this, "(Dummy) Edit job: " + job.title));
-
-            toggle.addActionListener(e -> JOptionPane.showMessageDialog(
-                    CompanyDashboardScreen.this, "(Dummy) Toggle status for: " + job.title));
+            toggle.addActionListener(e -> {
+                String cur = (job.status == null) ? "OPEN" : job.status;
+                String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
+                boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+                if (!ok) {
+                    JOptionPane.showMessageDialog(CompanyDashboardScreen.this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                loadFromDb();
+            });
 
             actions.add(applicants);
             actions.add(edit);
             actions.add(toggle);
 
-            // Put info + actions on one row, top-aligned
             JPanel row = new JPanel(new BorderLayout(12, 0));
             row.setOpaque(false);
             row.add(info, BorderLayout.CENTER);
@@ -493,13 +865,11 @@ public class CompanyDashboardScreen extends JFrame {
         }
     }
 
-    // helper to avoid html breaking
     private static String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
-    // Quick local test
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new CompanyDashboardScreen("Tech Innovations Inc.").setVisible(true));
     }
