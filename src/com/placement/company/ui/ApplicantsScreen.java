@@ -9,13 +9,14 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ApplicantsScreen extends JFrame {
 
-    // Theme (same as company dashboard)
     private static final Color GRAD_START = new Color(220, 38, 38);
     private static final Color GRAD_END   = new Color(244, 63, 94);
 
@@ -23,31 +24,27 @@ public class ApplicantsScreen extends JFrame {
     private static final Color TEXT_DARK = new Color(15, 23, 42);
     private static final Color TEXT_MUTED = new Color(90, 98, 112);
 
-    private final JFrame parent;
+    private final JFrame parent;          // ✅ dashboard reference
     private final String companyName;
     private final long jobId;
     private final String jobTitle;
 
     private final CompanyApplicationDao dao = new CompanyApplicationDao();
 
-    // Filter UI
     private JTextField searchField;
     private JComboBox<String> statusFilter;
     private JLabel countLabel;
 
-    // Table
     private DefaultTableModel model;
     private JTable table;
 
-    // Action buttons
     private JButton openResumeBtn;
     private JButton shortlistBtn;
     private JButton rejectBtn;
     private JButton interviewBtn;
 
-    // Data
     private List<CompanyApplicationDao.ApplicationRow> allRows = new ArrayList<>();
-    private List<CompanyApplicationDao.ApplicationRow> filteredRows = new ArrayList<>();
+    private final List<CompanyApplicationDao.ApplicationRow> filteredRows = new ArrayList<>();
 
     public ApplicantsScreen(JFrame parent, String companyName, long jobId, String jobTitle) {
         this.parent = parent;
@@ -58,11 +55,29 @@ public class ApplicantsScreen extends JFrame {
         setTitle("Applicants - " + jobTitle);
         setSize(1150, 740);
         setLocationRelativeTo(parent);
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setMinimumSize(new Dimension(980, 650));
+
+        // ✅ Back behavior on X button too
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) { goBack(); }
+        });
 
         initUI();
         loadApplicants();
+
+        // ✅ maximize on open
+        SwingUtilities.invokeLater(() -> setExtendedState(JFrame.MAXIMIZED_BOTH));
+    }
+
+    private void goBack() {
+        if (parent != null) {
+            parent.setVisible(true);
+            parent.setExtendedState(JFrame.MAXIMIZED_BOTH);
+            parent.toFront();
+            parent.requestFocus();
+        }
+        dispose();
     }
 
     private void initUI() {
@@ -76,15 +91,12 @@ public class ApplicantsScreen extends JFrame {
         setContentPane(root);
     }
 
-    /* ============================= Header ============================= */
-
     private JComponent buildHeader() {
         JPanel header = new GradientPanel(GRAD_START, GRAD_END);
         header.setPreferredSize(new Dimension(1100, 160));
         header.setLayout(new BorderLayout());
         header.setBorder(new EmptyBorder(22, 24, 18, 24));
 
-        // Left: icon + title/subtitle
         JPanel left = new JPanel();
         left.setOpaque(false);
         left.setLayout(new BoxLayout(left, BoxLayout.X_AXIS));
@@ -94,7 +106,7 @@ public class ApplicantsScreen extends JFrame {
         iconBox.setMaximumSize(new Dimension(56, 56));
         iconBox.setLayout(new GridBagLayout());
 
-        JLabel icon = new JLabel("\uD83D\uDC65"); // 👥
+        JLabel icon = new JLabel("\uD83D\uDC65");
         icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 22));
         icon.setForeground(Color.WHITE);
         iconBox.add(icon);
@@ -119,16 +131,12 @@ public class ApplicantsScreen extends JFrame {
         left.add(iconBox);
         left.add(titles);
 
-        // Right: back + refresh
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         right.setOpaque(false);
 
         JButton back = new OutlineButton("← Back");
         back.setForeground(Color.WHITE);
-        back.addActionListener(e -> {
-            if (parent != null) parent.setVisible(true);
-            dispose();
-        });
+        back.addActionListener(e -> goBack());
 
         JButton refresh = new SoftButton("Refresh", new Color(255, 255, 255, 210), TEXT_DARK);
         refresh.addActionListener(e -> loadApplicants());
@@ -136,7 +144,6 @@ public class ApplicantsScreen extends JFrame {
         right.add(back);
         right.add(refresh);
 
-        // Filter bar inside header (white translucent card)
         JPanel filterCard = new RoundedPanel(18, new Color(255, 255, 255, 235));
         filterCard.setLayout(new BorderLayout());
         filterCard.setBorder(new EmptyBorder(12, 12, 12, 12));
@@ -167,7 +174,6 @@ public class ApplicantsScreen extends JFrame {
 
         filterCard.add(filters, BorderLayout.WEST);
 
-        // Listeners
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { applyFilters(); }
             @Override public void removeUpdate(DocumentEvent e) { applyFilters(); }
@@ -211,10 +217,7 @@ public class ApplicantsScreen extends JFrame {
         combo.setBackground(Color.WHITE);
     }
 
-    /* ============================= Center ============================= */
-
     private JComponent buildCenter() {
-        // Table model
         model = new DefaultTableModel(
                 new Object[]{"Applicant", "Email", "GPA", "Year", "Status", "Applied At", "Resume"}, 0
         ) {
@@ -232,13 +235,8 @@ public class ApplicantsScreen extends JFrame {
         table.setGridColor(new Color(235, 240, 248));
         table.setIntercellSpacing(new Dimension(0, 1));
 
-        // Status pill renderer
-        int statusCol = 4;
-        table.getColumnModel().getColumn(statusCol).setCellRenderer(new StatusPillRenderer());
-
-        // Resume renderer (simple badge)
-        int resumeCol = 6;
-        table.getColumnModel().getColumn(resumeCol).setCellRenderer(new ResumeBadgeRenderer());
+        table.getColumnModel().getColumn(4).setCellRenderer(new StatusPillRenderer());
+        table.getColumnModel().getColumn(6).setCellRenderer(new ResumeBadgeRenderer());
 
         table.getSelectionModel().addListSelectionListener(e -> updateButtons());
 
@@ -246,7 +244,6 @@ public class ApplicantsScreen extends JFrame {
         sp.setBorder(BorderFactory.createEmptyBorder());
         sp.getViewport().setBackground(Color.WHITE);
 
-        // White rounded card around table
         JPanel cardInner = new JPanel(new BorderLayout());
         cardInner.setBackground(Color.WHITE);
         cardInner.setBorder(new EmptyBorder(14, 14, 14, 14));
@@ -264,8 +261,6 @@ public class ApplicantsScreen extends JFrame {
 
         return wrap;
     }
-
-    /* ============================= Footer ============================= */
 
     private JComponent buildFooter() {
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
@@ -291,7 +286,6 @@ public class ApplicantsScreen extends JFrame {
             new ScheduleInterviewDialog(this, r, dao, this::loadApplicants).setVisible(true);
         });
 
-
         footer.add(openResumeBtn);
         footer.add(shortlistBtn);
         footer.add(rejectBtn);
@@ -300,12 +294,10 @@ public class ApplicantsScreen extends JFrame {
         return footer;
     }
 
-    /* ============================= Data / Filtering ============================= */
-
     private void loadApplicants() {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         model.setRowCount(0);
-        allRows.clear();
+        allRows = new ArrayList<>();
         filteredRows.clear();
 
         new SwingWorker<List<CompanyApplicationDao.ApplicationRow>, Void>() {
@@ -354,7 +346,7 @@ public class ApplicantsScreen extends JFrame {
         }
 
         rebuildTable();
-        countLabel.setText(filteredRows.size() + " results");
+        if (countLabel != null) countLabel.setText(filteredRows.size() + " results");
         updateButtons();
     }
 
@@ -392,8 +384,6 @@ public class ApplicantsScreen extends JFrame {
         interviewBtn.setToolTipText(rejected ? "Cannot schedule interview for rejected applicant." : null);
     }
 
-    /* ============================= Actions ============================= */
-
     private void openResume() {
         CompanyApplicationDao.ApplicationRow r = selectedRow();
         if (r == null) return;
@@ -421,106 +411,6 @@ public class ApplicantsScreen extends JFrame {
         }
         loadApplicants();
     }
-
-    private void openScheduleInterviewDialog() {
-        CompanyApplicationDao.ApplicationRow r = selectedRow();
-        if (r == null) return;
-
-        if (r.status != null && r.status.equalsIgnoreCase("REJECTED")) {
-            JOptionPane.showMessageDialog(this, "Rejected applicants cannot be interviewed.", "Not Allowed", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        JTextField when = new JTextField("2026-02-20 10:00:00");
-        JComboBox<String> mode = new JComboBox<>(new String[]{"Online", "Face-to-face"});
-        JTextField location = new JTextField("Google Meet link / Room");
-        JTextArea notes = new JTextArea(4, 26);
-        notes.setLineWrap(true);
-        notes.setWrapStyleWord(true);
-        notes.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-
-        JScrollPane notesScroll = new JScrollPane(notes);
-        notesScroll.setBorder(BorderFactory.createLineBorder(new Color(220, 226, 235), 1, true));
-        notesScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-        styleSearchField(when);
-        styleCombo(mode);
-        styleSearchField(location);
-
-        mode.addActionListener(e -> {
-            String m = String.valueOf(mode.getSelectedItem());
-            if ("Online".equalsIgnoreCase(m)) location.setText("Google Meet / Zoom link");
-            else location.setText("Office address / Room");
-        });
-
-        JPanel p = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6, 6, 6, 6);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.anchor = GridBagConstraints.NORTHWEST;
-
-        int y = 0;
-
-        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
-        p.add(new JLabel("Scheduled at (YYYY-MM-DD HH:MM:SS)"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1;
-        p.add(when, gbc);
-        y++;
-
-        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
-        p.add(new JLabel("Mode"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1;
-        p.add(mode, gbc);
-        y++;
-
-        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
-        p.add(new JLabel("Location / Link"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1;
-        p.add(location, gbc);
-        y++;
-
-        gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
-        p.add(new JLabel("Notes"), gbc);
-        gbc.gridx = 1; gbc.weightx = 1;
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weighty = 1;
-        p.add(notesScroll, gbc);
-
-        int res = JOptionPane.showConfirmDialog(this, p, "Schedule Interview", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (res != JOptionPane.OK_OPTION) return;
-
-        String scheduledAt = when.getText().trim();
-        if (!scheduledAt.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}")) {
-            JOptionPane.showMessageDialog(this,
-                    "Invalid date format.\nUse: YYYY-MM-DD HH:MM:SS",
-                    "Validation",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        try {
-            long interviewId = dao.scheduleInterview(
-                    r.applicationId,
-                    scheduledAt,
-                    String.valueOf(mode.getSelectedItem()),
-                    location.getText().trim(),
-                    notes.getText().trim()
-            );
-
-            if (interviewId <= 0) {
-                JOptionPane.showMessageDialog(this, "Failed to schedule interview.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            JOptionPane.showMessageDialog(this, "Interview scheduled!", "Success", JOptionPane.INFORMATION_MESSAGE);
-            loadApplicants();
-
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    /* ============================= Renderers ============================= */
 
     private static class StatusPillRenderer extends DefaultTableCellRenderer {
         @Override
@@ -577,8 +467,6 @@ public class ApplicantsScreen extends JFrame {
             return lbl;
         }
     }
-
-    /* ============================= Dashboard-style Components ============================= */
 
     private static class GradientPanel extends JPanel {
         private final Color start;

@@ -18,18 +18,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Company dashboard UI (DB connected).
- * - Loads jobs from SQLite job_listings via CompanyJobDao
- * - Updates stats cards from DB
- * - Close/Reopen updates DB and refreshes UI
- * - Search + status filter + cards/table toggle
- *
- * FIXED: Uses CompanyJobDao.JobRow everywhere (no inner JobRow type mismatch).
- */
 public class CompanyDashboardScreen extends JFrame {
 
-    // CompanyCreateAccountScreen theme (red -> pink)
     private static final Color GRAD_START = new Color(220, 38, 38);
     private static final Color GRAD_END   = new Color(244, 63, 94);
 
@@ -39,7 +29,6 @@ public class CompanyDashboardScreen extends JFrame {
     private final String companyName;
     private final CompanyJobDao jobDao = new CompanyJobDao();
 
-    // stats cards so we can update values after loading
     private StatCard activeJobsCard;
     private StatCard totalApplicantsCard;
     private StatCard offersMadeCard;
@@ -47,7 +36,6 @@ public class CompanyDashboardScreen extends JFrame {
 
     private JButton refreshBtn;
 
-    // --- Jobs state / UI (Search + Cards/Table) ---
     private final List<CompanyJobDao.JobRow> allJobs = new ArrayList<>();
     private final List<CompanyJobDao.JobRow> filteredJobs = new ArrayList<>();
 
@@ -57,7 +45,7 @@ public class CompanyDashboardScreen extends JFrame {
     private CardLayout jobsViewLayout;
     private JPanel jobsViewPanel;
 
-    private JPanel jobsCardsList; // cards container
+    private JPanel jobsCardsList;
 
     private JTable jobsTable;
     private DefaultTableModel jobsTableModel;
@@ -83,6 +71,9 @@ public class CompanyDashboardScreen extends JFrame {
         setMinimumSize(new Dimension(980, 650));
 
         initUI();
+
+        // ✅ Keep dashboard maximized (helps when returning from Applicants too)
+        SwingUtilities.invokeLater(() -> setExtendedState(JFrame.MAXIMIZED_BOTH));
     }
 
     private void initUI() {
@@ -101,7 +92,6 @@ public class CompanyDashboardScreen extends JFrame {
         header.setLayout(new BorderLayout());
         header.setBorder(new EmptyBorder(24, 28, 24, 28));
 
-        // Left: icon + title/subtitle
         JPanel left = new JPanel();
         left.setOpaque(false);
         left.setLayout(new BoxLayout(left, BoxLayout.X_AXIS));
@@ -111,7 +101,7 @@ public class CompanyDashboardScreen extends JFrame {
         iconBox.setMaximumSize(new Dimension(56, 56));
         iconBox.setLayout(new GridBagLayout());
 
-        JLabel icon = new JLabel("\uD83C\uDFE2"); // building icon
+        JLabel icon = new JLabel("\uD83C\uDFE2");
         icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 22));
         icon.setForeground(Color.WHITE);
         iconBox.add(icon);
@@ -136,16 +126,10 @@ public class CompanyDashboardScreen extends JFrame {
         left.add(iconBox);
         left.add(titles);
 
-        // Right: Logout button
         JButton logout = new OutlineButton("Logout");
         logout.setForeground(Color.WHITE);
         logout.addActionListener(e -> {
-            int ok = JOptionPane.showConfirmDialog(
-                    this,
-                    "Log out now?",
-                    "Confirm",
-                    JOptionPane.YES_NO_OPTION
-            );
+            int ok = JOptionPane.showConfirmDialog(this, "Log out now?", "Confirm", JOptionPane.YES_NO_OPTION);
             if (ok == JOptionPane.YES_OPTION) {
                 new LoginScreen().setVisible(true);
                 dispose();
@@ -216,11 +200,8 @@ public class CompanyDashboardScreen extends JFrame {
 
         grid.setPreferredSize(new Dimension(0, 112));
         grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 112));
-
         return grid;
     }
-
-    /* ============================= Jobs Section ============================= */
 
     private JComponent buildJobsSection() {
         JPanel section = new JPanel();
@@ -272,12 +253,7 @@ public class CompanyDashboardScreen extends JFrame {
 
         JButton post = new SolidButton("+ Post New Job", GRAD_START);
         post.addActionListener(e -> {
-            PostJobDialog dlg = new PostJobDialog(
-                    CompanyDashboardScreen.this,
-                    companyName,
-                    jobDao,
-                    this::loadFromDb
-            );
+            PostJobDialog dlg = new PostJobDialog(this, companyName, jobDao, this::loadFromDb);
             dlg.setVisible(true);
         });
 
@@ -302,16 +278,13 @@ public class CompanyDashboardScreen extends JFrame {
 
         section.add(jobsViewPanel);
 
-        // Load real data
         loadFromDb();
 
-        // Listeners
         jobSearchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
             @Override public void removeUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
             @Override public void changedUpdate(DocumentEvent e) { applyJobFiltersAndRefreshUI(); }
         });
-
         statusFilter.addActionListener(e -> applyJobFiltersAndRefreshUI());
 
         return section;
@@ -319,14 +292,7 @@ public class CompanyDashboardScreen extends JFrame {
 
     private void openEditJob(CompanyJobDao.JobRow job) {
         if (job == null) return;
-
-        EditJobDialog dlg = new EditJobDialog(
-                this,
-                companyName,
-                jobDao,
-                job,
-                this::loadFromDb
-        );
+        EditJobDialog dlg = new EditJobDialog(this, companyName, jobDao, job, this::loadFromDb);
         dlg.setVisible(true);
     }
 
@@ -376,7 +342,6 @@ public class CompanyDashboardScreen extends JFrame {
         tableViewApplicantsBtn.addActionListener(e -> openApplicants(selectedTableJob()));
         tableEditBtn.addActionListener(e -> openEditJob(selectedTableJob()));
 
-        // DB UPDATE on toggle
         tableToggleBtn.addActionListener(e -> {
             CompanyJobDao.JobRow job = selectedTableJob();
             if (job == null) return;
@@ -397,8 +362,7 @@ public class CompanyDashboardScreen extends JFrame {
         actions.add(tableToggleBtn);
 
         jobsTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
+            @Override public void valueChanged(ListSelectionEvent e) {
                 if (e.getValueIsAdjusting()) return;
                 updateTableActionButtons();
             }
@@ -418,8 +382,7 @@ public class CompanyDashboardScreen extends JFrame {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
         new SwingWorker<LoadedData, Void>() {
-            @Override
-            protected LoadedData doInBackground() {
+            @Override protected LoadedData doInBackground() {
                 LoadedData d = new LoadedData();
                 d.jobs = jobDao.listByCompanyName(companyName);
                 d.activeJobs = jobDao.countActiveJobs(companyName);
@@ -429,15 +392,13 @@ public class CompanyDashboardScreen extends JFrame {
                 return d;
             }
 
-            @Override
-            protected void done() {
+            @Override protected void done() {
                 try {
                     LoadedData d = get();
 
                     allJobs.clear();
                     if (d.jobs != null) allJobs.addAll(d.jobs);
 
-                    // Update stats
                     activeJobsCard.setValue(String.valueOf(d.activeJobs));
                     totalApplicantsCard.setValue(String.valueOf(d.totalApplicants));
                     offersMadeCard.setValue(String.valueOf(d.offersMade));
@@ -558,7 +519,7 @@ public class CompanyDashboardScreen extends JFrame {
     private static String formatPosted(String raw) {
         if (raw == null || raw.isBlank()) return "";
         try {
-            String datePart = raw.length() >= 10 ? raw.substring(0, 10) : raw; // YYYY-MM-DD
+            String datePart = raw.length() >= 10 ? raw.substring(0, 10) : raw;
             LocalDate d = LocalDate.parse(datePart);
             return d.format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
         } catch (Exception e) {
@@ -574,8 +535,11 @@ public class CompanyDashboardScreen extends JFrame {
         return card;
     }
 
+    // ✅ NEW NAV: hide dashboard (not dispose), open applicants with parent reference
     private void openApplicants(CompanyJobDao.JobRow job) {
         if (job == null) return;
+
+        this.setVisible(false);
 
         ApplicantsScreen screen = new ApplicantsScreen(this, companyName, job.jobId, job.title);
         screen.setVisible(true);
@@ -593,8 +557,7 @@ public class CompanyDashboardScreen extends JFrame {
             setOpaque(false);
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -614,8 +577,7 @@ public class CompanyDashboardScreen extends JFrame {
             setOpaque(false);
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(fill);
@@ -665,8 +627,7 @@ public class CompanyDashboardScreen extends JFrame {
             setOpaque(false);
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(getBackground());
@@ -691,8 +652,7 @@ public class CompanyDashboardScreen extends JFrame {
             setOpaque(false);
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(getBackground());
@@ -725,8 +685,7 @@ public class CompanyDashboardScreen extends JFrame {
             repaint();
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(bg);
@@ -756,16 +715,14 @@ public class CompanyDashboardScreen extends JFrame {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
             addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
+                @Override public void mouseEntered(MouseEvent e) {
                     setBorder(BorderFactory.createCompoundBorder(
                             BorderFactory.createLineBorder(new Color(255, 255, 255, 180), 1, true),
                             BorderFactory.createEmptyBorder(10, 16, 10, 16)
                     ));
                 }
 
-                @Override
-                public void mouseExited(MouseEvent e) {
+                @Override public void mouseExited(MouseEvent e) {
                     setBorder(BorderFactory.createCompoundBorder(
                             BorderFactory.createLineBorder(new Color(255, 255, 255, 110), 1, true),
                             BorderFactory.createEmptyBorder(10, 16, 10, 16)
