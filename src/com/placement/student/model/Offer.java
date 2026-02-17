@@ -3,7 +3,6 @@ package com.placement.student.model;
 public class Offer {
     private long offerId;
     private long applicationId;
-    private double packageLpa;
     private String joiningDate;  // store as TEXT
     private String status;       // PENDING / ACCEPTED / REJECTED
     private String issuedAt;     // store as TEXT (datetime)
@@ -15,9 +14,6 @@ public class Offer {
 
     public long getApplicationId() { return applicationId; }
     public void setApplicationId(long applicationId) { this.applicationId = applicationId; }
-
-    public double getPackageLpa() { return packageLpa; }
-    public void setPackageLpa(double packageLpa) { this.packageLpa = packageLpa; }
 
     public String getJoiningDate() { return joiningDate; }
     public void setJoiningDate(String joiningDate) { this.joiningDate = joiningDate; }

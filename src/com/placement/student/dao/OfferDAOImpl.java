@@ -62,7 +62,6 @@ public class OfferDAOImpl implements OfferDAO {
         Offer o = new Offer();
         o.setOfferId(rs.getLong("offer_id"));
         o.setApplicationId(rs.getLong("application_id"));
-        o.setPackageLpa(rs.getDouble("package_lpa"));
         o.setJoiningDate(rs.getString("joining_date"));
         o.setStatus(rs.getString("status"));
         o.setIssuedAt(rs.getString("issued_at"));
