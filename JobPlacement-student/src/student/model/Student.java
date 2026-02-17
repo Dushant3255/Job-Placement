@@ -7,6 +7,7 @@ public class Student {
     private String passwordHash;
     private String firstName;
     private String lastName;
+    private String gender;
     private String phone;
     private String department;
 
@@ -30,6 +31,9 @@ public class Student {
 
     public String getLastName() { return lastName; }
     public void setLastName(String lastName) { this.lastName = lastName; }
+    
+    public String getGender() {return gender;}
+    public void setGender(String gender) {this.gender = gender; }
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }

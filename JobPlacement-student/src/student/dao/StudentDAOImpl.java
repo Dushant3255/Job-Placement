@@ -8,7 +8,7 @@ public class StudentDAOImpl implements StudentDAO {
 
     @Override
     public long register(Student s, String rawPassword) {
-        String sql = "INSERT INTO students (username,email,password_hash,first_name,last_name,phone,department) " +
+        String sql = "INSERT INTO students (username,email,password_hash,first_name,last_name,gender,phone,department) " +
                      "VALUES (?,?,?,?,?,?,?)";
 
         try (Connection con = DB.getConnection();
@@ -19,8 +19,9 @@ public class StudentDAOImpl implements StudentDAO {
             ps.setString(3, PasswordUtil.sha256(rawPassword));
             ps.setString(4, s.getFirstName());
             ps.setString(5, s.getLastName());
-            ps.setString(6, s.getPhone());
-            ps.setString(7, s.getDepartment());
+            ps.setString(6, s.getGender());
+            ps.setString(7, s.getPhone());
+            ps.setString(8, s.getDepartment());
 
             ps.executeUpdate();
 
