@@ -7,7 +7,8 @@ public class Offer {
     private String joiningDate;  // store as TEXT
     private String status;       // PENDING / ACCEPTED / REJECTED
     private String issuedAt;     // store as TEXT (datetime)
-
+    private String letterPath;
+    
     public Offer() {}
 
     public long getOfferId() { return offerId; }
@@ -27,4 +28,7 @@ public class Offer {
 
     public String getIssuedAt() { return issuedAt; }
     public void setIssuedAt(String issuedAt) { this.issuedAt = issuedAt; }
+    
+    public String getletterPath() { return letterPath; }
+    public void setletterPath(String letterPath) { this.letterPath = letterPath; }
 }

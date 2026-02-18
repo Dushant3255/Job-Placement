@@ -132,7 +132,9 @@ public final class DB {
             		  min_gpa REAL,
             		  min_year INTEGER,
             		  eligibility_rule TEXT,
-            		  status TEXT NOT NULL DEFAULT 'OPEN',
+                      positions_available INTEGER NOT NULL DEFAULT 0,
+                      hired_count INTEGER NOT NULL DEFAULT 0,
+                      status TEXT NOT NULL DEFAULT 'OPEN',
             		  posted_at TEXT NOT NULL DEFAULT (datetime('now'))
             		);
             		""");
@@ -145,25 +147,25 @@ public final class DB {
             		  status TEXT NOT NULL DEFAULT 'APPLIED',
             		  resume_path TEXT,
             		  applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+                      admin_confirmed INTEGER NOT NULL DEFAULT 0,
+                      admin_confirmed_at TEXT,
             		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE,
             		  FOREIGN KEY(job_id) REFERENCES job_listings(job_id) ON DELETE CASCADE
             		);
             		""");
 
             		st.execute("""
-    			    CREATE TABLE IF NOT EXISTS interviews (
-    			      interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    			      application_id INTEGER NOT NULL,
-    			      scheduled_at TEXT NOT NULL,
-    			      meeting_link TEXT,
-    			      mode TEXT,
-    			      location TEXT,
-    			      status TEXT NOT NULL DEFAULT 'SCHEDULED',
-    			      notes TEXT,
-    			      FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
-    			    );
-        			""");
-
+            		CREATE TABLE IF NOT EXISTS interviews (
+            		  interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            		  application_id INTEGER NOT NULL,
+            		  scheduled_at TEXT NOT NULL,
+            		  mode TEXT,
+            		  location TEXT,
+            		  status TEXT NOT NULL DEFAULT 'SCHEDULED',
+            		  notes TEXT,
+            		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+            		);
+            		""");
 
             		st.execute("""
             		CREATE TABLE IF NOT EXISTS offers (
@@ -173,34 +175,32 @@ public final class DB {
             		  joining_date TEXT,
             		  status TEXT NOT NULL DEFAULT 'PENDING',
             		  issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+                      letter_path TEXT,
             		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
             		);
             		""");
 
-            		st.execute("""
-            		CREATE TABLE IF NOT EXISTS off_campus_jobs (
-            		  offcampus_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            		  student_id INTEGER NOT NULL,
-            		  company_name TEXT NOT NULL,
-            		  role_title TEXT NOT NULL,
-            		  applied_date TEXT,
-            		  status TEXT,
-            		  notes TEXT,
-            		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
-            		);
-            		""");
-            		
-            		st.execute("""
-    			    CREATE TABLE IF NOT EXISTS student_documents (
-    			      student_id INTEGER PRIMARY KEY,
-    			      cv_path TEXT,
-    			      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    			      FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
-    			    );
-            			""");
+            		// --- Lightweight migrations for older DB files ---
+                    // Add columns if running against an existing database created before these fields existed.
+                    try { st.execute("ALTER TABLE offers ADD COLUMN letter_path TEXT"); } catch (SQLException ignore) {}
+                    try { st.execute("ALTER TABLE job_listings ADD COLUMN positions_available INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
+                    try { st.execute("ALTER TABLE job_listings ADD COLUMN hired_count INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
+                    try { st.execute("ALTER TABLE applications ADD COLUMN admin_confirmed INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
+                    try { st.execute("ALTER TABLE applications ADD COLUMN admin_confirmed_at TEXT"); } catch (SQLException ignore) {}
 
-
-            // Seed a default admin user if none exists (so the Admin panel can be accessed)
+                    st.execute("""
+                    CREATE TABLE IF NOT EXISTS off_campus_jobs (
+                      offcampus_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      student_id INTEGER NOT NULL,
+                      company_name TEXT NOT NULL,
+                      role_title TEXT NOT NULL,
+                      applied_date TEXT,
+                      status TEXT,
+                      notes TEXT,
+                      FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+                    );
+                    """);
+// Seed a default admin user if none exists (so the Admin panel can be accessed)
             seedDefaultAdmin(con);
 
             System.out.println("✅ DB initialized at: " + DB_FILE.getAbsolutePath());

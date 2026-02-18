@@ -2,10 +2,7 @@ package com.placement.admin.dao;
 
 import com.placement.common.db.DB;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,11 +17,16 @@ public class AdminJobListingDao {
         public Integer minYear;
         public String status;
         public String postedAt;
+
+        public int positionsAvailable;
+        public int hiredCount;
     }
 
     public List<JobRow> listAll(String keyword) {
         String base = """
-            SELECT job_id, company_name, title, department, min_gpa, min_year, status, posted_at
+            SELECT job_id, company_name, title, department, min_gpa, min_year,
+                   positions_available, hired_count,
+                   status, posted_at
             FROM job_listings
             WHERE 1=1
         """;
@@ -32,12 +34,13 @@ public class AdminJobListingDao {
         boolean hasFilter = keyword != null && !keyword.trim().isEmpty();
         String filter = hasFilter ? """
             AND (
-                company_name LIKE ? OR title LIKE ? OR department LIKE ?
+                company_name LIKE ? OR title LIKE ? OR department LIKE ? OR status LIKE ?
             )
         """ : "";
 
-        String sql = base + filter + " ORDER BY posted_at DESC";
+        String sql = base + filter + " ORDER BY job_id DESC";
 
+        List<JobRow> out = new ArrayList<>();
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
 
@@ -46,10 +49,10 @@ public class AdminJobListingDao {
                 ps.setString(1, like);
                 ps.setString(2, like);
                 ps.setString(3, like);
+                ps.setString(4, like);
             }
 
             try (ResultSet rs = ps.executeQuery()) {
-                List<JobRow> out = new ArrayList<>();
                 while (rs.next()) {
                     JobRow r = new JobRow();
                     r.jobId = rs.getLong("job_id");
@@ -58,12 +61,14 @@ public class AdminJobListingDao {
                     r.department = rs.getString("department");
                     r.minGpa = (Double) rs.getObject("min_gpa");
                     r.minYear = (Integer) rs.getObject("min_year");
+                    r.positionsAvailable = rs.getInt("positions_available");
+                    r.hiredCount = rs.getInt("hired_count");
                     r.status = rs.getString("status");
                     r.postedAt = rs.getString("posted_at");
                     out.add(r);
                 }
-                return out;
             }
+            return out;
 
         } catch (SQLException e) {
             throw new RuntimeException("List job listings failed: " + e.getMessage(), e);
@@ -74,26 +79,30 @@ public class AdminJobListingDao {
         String sql = "UPDATE job_listings SET status=? WHERE job_id=?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
+
             ps.setString(1, newStatus);
             ps.setLong(2, jobId);
             return ps.executeUpdate() == 1;
+
         } catch (SQLException e) {
             throw new RuntimeException("Update job status failed: " + e.getMessage(), e);
         }
     }
-    
+
+    // Existing helper used by admin panel for off-campus integration (kept)
     public boolean insertOffCampusJob(
             String companyName,
             String title,
             String department,
             String description,
             Double minGpa,
-            Integer minYear
+            Integer minYear,
+            int positionsAvailable
     ) {
         String sql = """
             INSERT INTO job_listings
-            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'OFF_CAMPUS', 'OPEN')
+            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status, positions_available, hired_count)
+            VALUES (?, ?, ?, ?, ?, ?, 'OFF_CAMPUS', 'OPEN', ?, 0)
         """;
 
         try (Connection con = DB.getConnection();
@@ -105,6 +114,7 @@ public class AdminJobListingDao {
             ps.setString(4, description);
             ps.setObject(5, minGpa);
             ps.setObject(6, minYear);
+            ps.setInt(7, positionsAvailable);
 
             return ps.executeUpdate() == 1;
 
@@ -112,5 +122,4 @@ public class AdminJobListingDao {
             throw new RuntimeException("Insert off campus job failed: " + e.getMessage(), e);
         }
     }
-
 }

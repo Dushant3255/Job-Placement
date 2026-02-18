@@ -72,7 +72,6 @@ public class CompanyDashboardScreen extends JFrame {
         this(-1, companyName);
     }
 
-    // ✅ Use this constructor after login (recommended)
     public CompanyDashboardScreen(int companyUserId, String companyName) {
         this.companyUserId = companyUserId;
         this.companyName = (companyName == null || companyName.isBlank()) ? "Company" : companyName;
@@ -148,7 +147,6 @@ public class CompanyDashboardScreen extends JFrame {
             }
         });
 
-        // ✅ Avatar on header (profile picture)
         JLabel avatar = buildAvatarLabel(44);
         avatar.setToolTipText("Company Profile");
         avatar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -210,7 +208,7 @@ public class CompanyDashboardScreen extends JFrame {
     }
 
     private JLabel makePlaceholderAvatar(int size) {
-        JLabel lbl = new JLabel("\uD83C\uDFE2", SwingConstants.CENTER); // 🏢
+        JLabel lbl = new JLabel("\uD83C\uDFE2", SwingConstants.CENTER);
         lbl.setFont(new Font("Segoe UI Emoji", Font.PLAIN, Math.max(16, size - 22)));
         lbl.setForeground(Color.WHITE);
         lbl.setOpaque(true);
@@ -416,6 +414,7 @@ public class CompanyDashboardScreen extends JFrame {
         tableViewApplicantsBtn.addActionListener(e -> openApplicants(selectedTableJob()));
         tableEditBtn.addActionListener(e -> openEditJob(selectedTableJob()));
 
+        // ✅ FIXED: store ok + call new DAO signature
         tableToggleBtn.addActionListener(e -> {
             CompanyJobDao.JobRow job = selectedTableJob();
             if (job == null) return;
@@ -423,7 +422,7 @@ public class CompanyDashboardScreen extends JFrame {
             String cur = (job.status == null) ? "OPEN" : job.status;
             String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
 
-            boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+            boolean ok = jobDao.updateStatus(job.jobId, companyName, newStatus);
             if (!ok) {
                 JOptionPane.showMessageDialog(this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
@@ -609,7 +608,6 @@ public class CompanyDashboardScreen extends JFrame {
         return card;
     }
 
-    // ✅ NEW NAV: hide dashboard (not dispose), open applicants with parent reference
     private void openApplicants(CompanyJobDao.JobRow job) {
         if (job == null) return;
 
@@ -859,12 +857,19 @@ public class CompanyDashboardScreen extends JFrame {
             applicants.addActionListener(e -> openApplicants(job));
             edit.addActionListener(e -> openEditJob(job));
 
+            // ✅ FIXED: call new DAO signature
             toggle.addActionListener(e -> {
                 String cur = (job.status == null) ? "OPEN" : job.status;
                 String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
-                boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+
+                boolean ok = jobDao.updateStatus(job.jobId, CompanyDashboardScreen.this.companyName, newStatus);
                 if (!ok) {
-                    JOptionPane.showMessageDialog(CompanyDashboardScreen.this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(
+                            CompanyDashboardScreen.this,
+                            "Failed to update job status.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                    );
                     return;
                 }
                 loadFromDb();
