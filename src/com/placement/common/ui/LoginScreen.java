@@ -13,7 +13,6 @@ import com.placement.company.ui.CompanyDashboardScreen;
 import com.placement.company.dao.CompanyDao;
 import com.placement.company.model.CompanyProfile;
 
-
 public class LoginScreen extends JFrame {
 
     private char defaultEcho;
@@ -231,8 +230,8 @@ public class LoginScreen extends JFrame {
                                 // keep fallback name
                             }
 
-                            com.placement.company.ui.CompanyDashboardScreen dash =
-                                    new com.placement.company.ui.CompanyDashboardScreen(displayCompanyName);
+                            CompanyDashboardScreen dash =
+                                    new CompanyDashboardScreen(result.user.getId(), displayCompanyName);
 
                             dash.setExtendedState(JFrame.MAXIMIZED_BOTH);
                             dash.setVisible(true);
