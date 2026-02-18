@@ -12,7 +12,6 @@ import java.awt.*;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 public class ManageApplicationsPanel extends JPanel {
@@ -22,6 +21,19 @@ public class ManageApplicationsPanel extends JPanel {
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final JTextField searchField = new JTextField(18);
+
+    private JButton uploadOfferBtn;
+    private JButton confirmStatusBtn;
+
+    // Column indexes in tableModel
+    private static final int COL_APPLICATION_ID = 0;
+    private static final int COL_COMPANY = 2;
+    private static final int COL_JOB_TITLE = 3;
+    private static final int COL_STUDENT = 4;
+    private static final int COL_STUDENT_EMAIL = 5;
+    private static final int COL_APP_STATUS = 6;
+    private static final int COL_OFFER_STATUS = 8;
+    private static final int COL_ADMIN_CONFIRMED = 9;
 
     public ManageApplicationsPanel() {
         setLayout(new BorderLayout(10, 10));
@@ -44,6 +56,7 @@ public class ManageApplicationsPanel extends JPanel {
         table = new JTable(tableModel);
         table.setRowHeight(25);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.getSelectionModel().addListSelectionListener(e -> updateButtonStates());
 
         add(new JScrollPane(table), BorderLayout.CENTER);
         add(createBottomBar(), BorderLayout.SOUTH);
@@ -74,25 +87,23 @@ public class ManageApplicationsPanel extends JPanel {
     }
 
     private JPanel createBottomBar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        // Right-aligned with nicer spacing
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
         bar.setBackground(new Color(200, 200, 200));
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        JButton confirmBtn = new JButton("Confirm Company Action");
-        confirmBtn.addActionListener(e -> confirmCompanyAction());
-        bar.add(confirmBtn);
+        confirmStatusBtn = new JButton("Confirm Status");
+        confirmStatusBtn.addActionListener(e -> confirmStatus());
+        bar.add(confirmStatusBtn);
 
-        JButton uploadOfferBtn = new JButton("Upload Offer Letter");
+        uploadOfferBtn = new JButton("Upload Offer Letter");
+        uploadOfferBtn.setEnabled(false);
         uploadOfferBtn.addActionListener(e -> uploadOfferLetter());
         bar.add(uploadOfferBtn);
 
-        JButton declineBtn = new JButton("Decline (Reject)");
-        declineBtn.addActionListener(e -> declineApplicant());
-        bar.add(declineBtn);
-
-        JButton updateStatusBtn = new JButton("Update Status");
-        updateStatusBtn.addActionListener(e -> updateStatus());
-        bar.add(updateStatusBtn);
+        Dimension btnSize = new Dimension(180, 30);
+        confirmStatusBtn.setPreferredSize(btnSize);
+        uploadOfferBtn.setPreferredSize(btnSize);
 
         return bar;
     }
@@ -117,33 +128,85 @@ public class ManageApplicationsPanel extends JPanel {
                     r.appliedAt
             });
         }
+
+        updateButtonStates();
     }
 
-    private long getSelectedApplicationId() {
+    private void updateButtonStates() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow < 0) {
+            if (uploadOfferBtn != null) uploadOfferBtn.setEnabled(false);
+            if (confirmStatusBtn != null) confirmStatusBtn.setEnabled(false);
+            return;
+        }
+
+        String st = getSelectedStatus();
+        boolean canConfirm = st != null && (
+                st.equalsIgnoreCase("SHORTLISTED")
+                        || st.equalsIgnoreCase("REJECTED")
+                        || st.equalsIgnoreCase("INTERVIEW_SCHEDULED")
+        );
+
+        boolean isConfirmed = isSelectedAdminConfirmed();
+
+        // Grey out Confirm if already confirmed
+        if (confirmStatusBtn != null) confirmStatusBtn.setEnabled(canConfirm && !isConfirmed);
+
+        // Upload becomes clickable only AFTER status is confirmed AND shortlisted
+        boolean isShortlisted = st != null && st.equalsIgnoreCase("SHORTLISTED");
+        if (uploadOfferBtn != null) uploadOfferBtn.setEnabled(isShortlisted && isConfirmed);
+}
+
+    private boolean isSelectedAdminConfirmed() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow < 0) return false;
+        String val = String.valueOf(tableModel.getValueAt(selectedRow, COL_ADMIN_CONFIRMED));
+        return val != null && val.equalsIgnoreCase("YES");
+    }
+
+private String getSelectedCompanyName() {
+    int selectedRow = table.getSelectedRow();
+    if (selectedRow < 0) return null;
+    return String.valueOf(tableModel.getValueAt(selectedRow, COL_COMPANY));
+}
+
+private String getSelectedJobTitle() {
+    int selectedRow = table.getSelectedRow();
+    if (selectedRow < 0) return null;
+    return String.valueOf(tableModel.getValueAt(selectedRow, COL_JOB_TITLE));
+}
+
+private String getSelectedStudentUsername() {
+    int selectedRow = table.getSelectedRow();
+    if (selectedRow < 0) return null;
+    return String.valueOf(tableModel.getValueAt(selectedRow, COL_STUDENT));
+}
+
+private long getSelectedApplicationId() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow < 0) {
             JOptionPane.showMessageDialog(this, "Please select an application.");
             return -1;
         }
-        return ((Number) tableModel.getValueAt(selectedRow, 0)).longValue();
+        return ((Number) tableModel.getValueAt(selectedRow, COL_APPLICATION_ID)).longValue();
     }
 
     private String getSelectedStudentEmail() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow < 0) return null;
-        return String.valueOf(tableModel.getValueAt(selectedRow, 5));
+        return String.valueOf(tableModel.getValueAt(selectedRow, COL_STUDENT_EMAIL));
     }
 
     private String getSelectedStatus() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow < 0) return null;
-        return String.valueOf(tableModel.getValueAt(selectedRow, 6));
+        return String.valueOf(tableModel.getValueAt(selectedRow, COL_APP_STATUS));
     }
 
     private String getSelectedOfferStatus() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow < 0) return null;
-        return String.valueOf(tableModel.getValueAt(selectedRow, 8));
+        return String.valueOf(tableModel.getValueAt(selectedRow, COL_OFFER_STATUS));
     }
 
     /**
@@ -151,124 +214,46 @@ public class ManageApplicationsPanel extends JPanel {
      * - If company has SHORTLISTED / REJECTED / INTERVIEW_SCHEDULED, admin can confirm.
      * - If interview scheduled, confirm updates application status to PENDING.
      */
-    private void confirmCompanyAction() {
-        long applicationId = getSelectedApplicationId();
-        if (applicationId < 0) return;
+    /**
+ * Confirm the current company status for the selected application.
+ * Rules:
+ * - If status is REJECTED: behaves like Decline (Reject) (sets REJECTED and emails student)
+ * - If status is INTERVIEW_SCHEDULED: sets status to PENDING (and marks admin_confirmed)
+ * - If status is SHORTLISTED: marks admin_confirmed (upload offer becomes enabled)
+ */
+private void confirmStatus() {
+    long applicationId = getSelectedApplicationId();
+    if (applicationId < 0) return;
 
-        String currentStatus = getSelectedStatus();
-        if (currentStatus == null || currentStatus.isBlank()) return;
+    String currentStatus = getSelectedStatus();
+    if (currentStatus == null || currentStatus.isBlank()) return;
 
-        if (!(currentStatus.equalsIgnoreCase("SHORTLISTED")
-                || currentStatus.equalsIgnoreCase("REJECTED")
-                || currentStatus.equalsIgnoreCase("INTERVIEW_SCHEDULED"))) {
-            JOptionPane.showMessageDialog(this,
-                    "This action is intended for company statuses: SHORTLISTED, REJECTED, INTERVIEW_SCHEDULED.");
-            return;
-        }
-
-        boolean ok = dao.confirmCompanyAction(applicationId);
-        if (ok) {
-            JOptionPane.showMessageDialog(this, "Confirmed.");
-            load(searchField.getText());
-        } else {
-            JOptionPane.showMessageDialog(this, "Failed to confirm.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
+    // Safety confirmation dialog
+    String msg;
+    if (currentStatus.equalsIgnoreCase("REJECTED")) {
+        msg = "Confirm REJECTION for Application #" + applicationId + "?\n"
+                + "This will set status to REJECTED and send a rejection email.";
+    } else if (currentStatus.equalsIgnoreCase("INTERVIEW_SCHEDULED")) {
+        msg = "Confirm INTERVIEW_SCHEDULED for Application #" + applicationId + "?\n"
+                + "This will set the application status to PENDING.";
+    } else if (currentStatus.equalsIgnoreCase("SHORTLISTED")) {
+        msg = "Confirm SHORTLISTED for Application #" + applicationId + "?\n"
+                + "After confirmation, Upload Offer Letter will be enabled.";
+    } else {
+        msg = "Confirm current status for Application #" + applicationId + " (" + currentStatus + ")?";
     }
 
-    /**
-     * Requirement #2:
-     * - If shortlisted, admin uploads offer letter.
-     * - Offer status remains PENDING.
-     * - Email sent to applicant confirming they received an offer letter.
-     * - Student acceptance (in student module) updates offer to ACCEPTED, which later allows admin to update to HIRED.
-     */
-    private void uploadOfferLetter() {
-        long applicationId = getSelectedApplicationId();
-        if (applicationId < 0) return;
+    int choice = JOptionPane.showConfirmDialog(
+            this,
+            msg,
+            "Confirm Status",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+    );
+    if (choice != JOptionPane.YES_OPTION) return;
 
-        String status = getSelectedStatus();
-        if (status == null || !status.equalsIgnoreCase("SHORTLISTED")) {
-            JOptionPane.showMessageDialog(this, "Offer letters can only be uploaded for SHORTLISTED applicants.");
-            return;
-        }
-
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select Offer Letter (PDF)");
-        int result = chooser.showOpenDialog(this);
-        if (result != JFileChooser.APPROVE_OPTION) return;
-
-        File selected = chooser.getSelectedFile();
-        if (selected == null || !selected.exists()) return;
-
-        // Copy into project data folder for predictable relative paths.
-        // Stored path will be like: data/offers/<applicationId>-<filename>
-        try {
-            File offersDir = new File("data", "offers");
-            if (!offersDir.exists()) offersDir.mkdirs();
-
-            String safeName = selected.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
-            Path target = new File(offersDir, applicationId + "-" + safeName).toPath();
-            Files.copy(selected.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
-
-            // Create offer row in DB (PENDING) and attach letter path
-            long offerId = dao.createOffer(applicationId, null, null, target.toString());
-            if (offerId <= 0) {
-                JOptionPane.showMessageDialog(this, "Failed to save offer in database.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            // Email notification
-            String to = getSelectedStudentEmail();
-            if (to != null && !to.isBlank()) {
-                try {
-                    EmailService email = new EmailService();
-                    email.send(
-                            to,
-                            "Offer Letter Available",
-                            "You have received a letter of offer for your application (ID: " + applicationId + ").\n"
-                                    + "Please log in to the Job Placement System to view the offer and respond.\n\n"
-                                    + "Status: PENDING"
-                    );
-                } catch (IllegalStateException missingCreds) {
-                    // Email config missing - still keep DB changes
-                    JOptionPane.showMessageDialog(this,
-                            "Offer saved, but email was not sent (missing email configuration).\n"
-                                    + missingCreds.getMessage(),
-                            "Email Not Sent",
-                            JOptionPane.WARNING_MESSAGE);
-                } catch (MessagingException ex) {
-                    JOptionPane.showMessageDialog(this,
-                            "Offer saved, but email failed to send: " + ex.getMessage(),
-                            "Email Failed",
-                            JOptionPane.WARNING_MESSAGE);
-                }
-            }
-
-            JOptionPane.showMessageDialog(this, "Offer letter uploaded and offer created (PENDING).");
-            load(searchField.getText());
-
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Failed to upload offer letter: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    /**
-     * Requirement #3:
-     * - One button rejects the applicant and emails them.
-     */
-    private void declineApplicant() {
-        long applicationId = getSelectedApplicationId();
-        if (applicationId < 0) return;
-
-        int confirm = JOptionPane.showConfirmDialog(
-                this,
-                "Reject this applicant? This will set status to REJECTED and send an email.",
-                "Confirm Reject",
-                JOptionPane.YES_NO_OPTION
-        );
-        if (confirm != JOptionPane.YES_OPTION) return;
-
+    if (currentStatus.equalsIgnoreCase("REJECTED")) {
+        // Do what Decline button does (DB + email)
         boolean ok = dao.declineApplicant(applicationId);
         if (!ok) {
             JOptionPane.showMessageDialog(this, "Failed to reject applicant.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -299,47 +284,140 @@ public class ManageApplicationsPanel extends JPanel {
             }
         }
 
-        JOptionPane.showMessageDialog(this, "Applicant rejected.");
+        JOptionPane.showMessageDialog(this, "Status confirmed: REJECTED.");
         load(searchField.getText());
+        table.clearSelection();
+        updateButtonStates();
+        return;
     }
+
+    if (currentStatus.equalsIgnoreCase("INTERVIEW_SCHEDULED")) {
+        boolean ok = dao.confirmCompanyAction(applicationId); // DAO already sets to PENDING for interview scheduled
+        if (ok) {
+            JOptionPane.showMessageDialog(this, "Status confirmed: PENDING.");
+            load(searchField.getText());
+            table.clearSelection();
+            updateButtonStates();
+        } else {
+            JOptionPane.showMessageDialog(this, "Failed to confirm status.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return;
+    }
+
+    if (currentStatus.equalsIgnoreCase("SHORTLISTED")) {
+        boolean ok = dao.confirmCompanyAction(applicationId); // marks admin_confirmed
+        if (ok) {
+            JOptionPane.showMessageDialog(this, "Status confirmed: SHORTLISTED.");
+            load(searchField.getText());
+            table.clearSelection();
+            updateButtonStates();
+        } else {
+            JOptionPane.showMessageDialog(this, "Failed to confirm status.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return;
+    }
+
+    JOptionPane.showMessageDialog(this,
+            "Confirm Status is intended for: SHORTLISTED, REJECTED, INTERVIEW_SCHEDULED.");
+}
 
     /**
-     * Keep admin override, but tuned to the required flow:
-     * - After student accepts offer, admin may update to HIRED.
+     * Requirement #2:
+     * - If shortlisted, admin uploads offer letter.
+     * - Offer status remains PENDING.
+     * - Email sent to applicant confirming they received an offer letter.
+     * - Student acceptance (in student module) updates offer to ACCEPTED, which later allows admin to update to HIRED.
      */
-    private void updateStatus() {
-        long applicationId = getSelectedApplicationId();
-        if (applicationId < 0) return;
+    private void uploadOfferLetter() {
+    long applicationId = getSelectedApplicationId();
+    if (applicationId < 0) return;
 
-        String currentStatus = getSelectedStatus();
-        String offerStatus = getSelectedOfferStatus();
+    String status = getSelectedStatus();
+    if (status == null || !status.equalsIgnoreCase("SHORTLISTED") || !isSelectedAdminConfirmed()) {
+        JOptionPane.showMessageDialog(this, "Offer letters can only be uploaded for SHORTLISTED applicants.");
+        return;
+    }
 
-        // Allow HIRED only if offer was accepted (offer_status == ACCEPTED)
-        String[] options;
-        if ("ACCEPTED".equalsIgnoreCase(offerStatus) || "OFFER_ACCEPTED".equalsIgnoreCase(currentStatus)) {
-            options = new String[]{"HIRED"};
-        } else {
-            options = new String[]{"APPLIED", "SHORTLISTED", "REJECTED", "PENDING"};
+    String companyName = getSelectedCompanyName();
+    String jobTitle = getSelectedJobTitle();
+    String applicantName = getSelectedStudentUsername(); // username for now (student profile page can show full name later)
+
+    try {
+        File offersDir = new File("data", "offers");
+        if (!offersDir.exists()) offersDir.mkdirs();
+
+        // Ensure a default template exists
+        File templateFile = new File(offersDir, "default_offer_letter_template.txt");
+        if (!templateFile.exists()) {
+            String defaultTemplate =
+                    "LETTER OF OFFER\n\n"
+                            + "Company: {{COMPANY_NAME}}\n"
+                            + "Application ID: {{APPLICATION_ID}}\n"
+                            + "Applicant: {{APPLICANT_NAME}}\n"
+                            + "Job Title: {{JOB_TITLE}}\n\n"
+                            + "Dear {{APPLICANT_NAME}},\n\n"
+                            + "We are pleased to offer you the position of {{JOB_TITLE}} at {{COMPANY_NAME}}.\n"
+                            + "Please log in to the Job Placement System to review and accept your offer.\n\n"
+                            + "Regards,\n"
+                            + "{{COMPANY_NAME}}\n";
+            Files.writeString(templateFile.toPath(), defaultTemplate);
         }
 
-        String newStatus = (String) JOptionPane.showInputDialog(
-                this,
-                "Update application status:",
-                "Current Status: " + currentStatus,
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                options,
-                currentStatus
-        );
+        String template = Files.readString(templateFile.toPath());
 
-        if (newStatus != null && !newStatus.equalsIgnoreCase(currentStatus)) {
-            boolean ok = dao.updateStatus(applicationId, newStatus);
-            if (ok) {
-                JOptionPane.showMessageDialog(this, "Status updated successfully!");
-                load(searchField.getText());
-            } else {
-                JOptionPane.showMessageDialog(this, "Failed to update status.", "Error", JOptionPane.ERROR_MESSAGE);
+        String personalized = template
+                .replace("{{COMPANY_NAME}}", companyName == null ? "" : companyName)
+                .replace("{{APPLICATION_ID}}", String.valueOf(applicationId))
+                .replace("{{APPLICANT_NAME}}", applicantName == null ? "" : applicantName)
+                .replace("{{JOB_TITLE}}", jobTitle == null ? "" : jobTitle);
+
+        // Create a per-application letter file (no file explorer)
+        File outFile = new File(offersDir, "offer_" + applicationId + ".txt");
+        Files.writeString(outFile.toPath(), personalized);
+
+        // Create offer row in DB (PENDING) and attach letter path
+        long offerId = dao.createOffer(applicationId, null, null, outFile.toString());
+        if (offerId <= 0) {
+            JOptionPane.showMessageDialog(this, "Failed to save offer in database.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Email notification
+        String to = getSelectedStudentEmail();
+        if (to != null && !to.isBlank()) {
+            try {
+                EmailService email = new EmailService();
+                email.send(
+                        to,
+                        "Offer Letter Available",
+                        "You have received a letter of offer for your application (ID: " + applicationId + ").\n"
+                                + "Company: " + (companyName == null ? "" : companyName) + "\n"
+                                + "Job: " + (jobTitle == null ? "" : jobTitle) + "\n\n"
+                                + "Please log in to the Job Placement System to view the offer and respond.\n"
+                                + "Status: PENDING"
+                );
+            } catch (IllegalStateException missingCreds) {
+                JOptionPane.showMessageDialog(this,
+                        "Offer saved, but email was not sent (missing email configuration).\n"
+                                + missingCreds.getMessage(),
+                        "Email Not Sent",
+                        JOptionPane.WARNING_MESSAGE);
+            } catch (MessagingException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Offer saved, but email failed to send: " + ex.getMessage(),
+                        "Email Failed",
+                        JOptionPane.WARNING_MESSAGE);
             }
         }
+
+        JOptionPane.showMessageDialog(this, "Offer letter generated and offer created (PENDING).");
+        load(searchField.getText());
+        table.clearSelection();
+        updateButtonStates();
+
+    } catch (Exception ex) {
+        JOptionPane.showMessageDialog(this, "Failed to generate offer letter: " + ex.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
     }
+}
 }

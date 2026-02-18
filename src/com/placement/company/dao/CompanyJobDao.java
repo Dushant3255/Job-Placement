@@ -125,7 +125,7 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
                     ? "GENERAL"
                     : eligibilityRule.trim()
             );
-
+            ps.setInt(8, positionsAvailable);
             int rows = ps.executeUpdate();
             if (rows != 1) return -1;
 

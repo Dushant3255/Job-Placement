@@ -96,12 +96,13 @@ public class AdminJobListingDao {
             String department,
             String description,
             Double minGpa,
-            Integer minYear
+            Integer minYear,
+            int positionsAvailable
     ) {
         String sql = """
             INSERT INTO job_listings
             (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status, positions_available, hired_count)
-            VALUES (?, ?, ?, ?, ?, ?, 'OFF_CAMPUS', 'OPEN', 0, 0)
+            VALUES (?, ?, ?, ?, ?, ?, 'OFF_CAMPUS', 'OPEN', ?, 0)
         """;
 
         try (Connection con = DB.getConnection();
@@ -113,6 +114,7 @@ public class AdminJobListingDao {
             ps.setString(4, description);
             ps.setObject(5, minGpa);
             ps.setObject(6, minYear);
+            ps.setInt(7, positionsAvailable);
 
             return ps.executeUpdate() == 1;
 

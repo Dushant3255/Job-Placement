@@ -119,7 +119,7 @@ public boolean updateStatus(long offerId, long studentId, String status) throws 
         }
 
         conn.commit();
-        return true;
+        return true;}
     }
 
     private Offer map(ResultSet rs) throws SQLException {
