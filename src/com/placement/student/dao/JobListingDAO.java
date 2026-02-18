@@ -7,5 +7,6 @@ public interface JobListingDAO {
     List<JobListing> getAllOpen();
     List<JobListing> searchByDepartment(String department);
     List<JobListing> filterByEligibility(Double studentGpa, Integer studentYear);
+    List<JobListing> getAll();
     JobListing findById(long jobId);
 }

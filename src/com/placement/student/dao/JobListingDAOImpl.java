@@ -53,6 +53,13 @@ public class JobListingDAOImpl implements JobListingDAO {
             throw new RuntimeException("Find job listing failed: " + e.getMessage(), e);
         }
     }
+    
+    @Override
+    public List<JobListing> getAll() {
+        String sql = "SELECT * FROM job_listings ORDER BY posted_at DESC";
+        return list(sql, ps -> {});
+    }
+
 
     private interface Binder { void bind(PreparedStatement ps) throws SQLException; }
 

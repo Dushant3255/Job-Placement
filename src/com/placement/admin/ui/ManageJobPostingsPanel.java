@@ -23,7 +23,7 @@ public class ManageJobPostingsPanel extends JPanel {
 
         add(createTopBar(), BorderLayout.NORTH);
 
-        String[] cols = {"Job ID", "Company", "Title", "Department", "Min GPA", "Min Year", "Status", "Posted"};
+        String[] cols = {"Job ID", "Company", "Title", "Department", "Min GPA", "Min Year", "Hired/Positions", "Status", "Posted"};
         tableModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
@@ -90,6 +90,7 @@ public class ManageJobPostingsPanel extends JPanel {
                     r.department,
                     r.minGpa,
                     r.minYear,
+                    (r.hiredCount + "/" + r.positionsAvailable),
                     r.status,
                     r.postedAt
             });
@@ -104,7 +105,7 @@ public class ManageJobPostingsPanel extends JPanel {
         }
 
         long jobId = ((Number) tableModel.getValueAt(selectedRow, 0)).longValue();
-        String currentStatus = String.valueOf(tableModel.getValueAt(selectedRow, 6));
+        String currentStatus = String.valueOf(tableModel.getValueAt(selectedRow, 7));
 
         String[] options = {"OPEN", "CLOSED"};
         String newStatus = (String) JOptionPane.showInputDialog(
@@ -152,6 +153,7 @@ public class ManageJobPostingsPanel extends JPanel {
 
         JTextField minGpaField = new JTextField(22);
         JTextField minYearField = new JTextField(22);
+        JTextField positionsField = new JTextField(22);
 
         // Row helper
         java.util.function.BiConsumer<String, Component> addRow = (label, comp) -> {
@@ -168,6 +170,7 @@ public class ManageJobPostingsPanel extends JPanel {
         addRow.accept("Description *", new JScrollPane(descArea));
         addRow.accept("Min GPA", minGpaField);
         addRow.accept("Min Year", minYearField);
+        addRow.accept("Positions Available *", positionsField);
 
         JButton save = new JButton("Save");
         JButton cancel = new JButton("Cancel");
@@ -201,13 +204,26 @@ public class ManageJobPostingsPanel extends JPanel {
                 }
             }
 
+            int positions;
+            try {
+                positions = Integer.parseInt(positionsField.getText().trim());
+                if (positions <= 0) {
+                    JOptionPane.showMessageDialog(dialog, "Positions must be greater than 0.");
+                    return;
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Positions must be a valid number.");
+                return;
+            }
+
             boolean ok = dao.insertOffCampusJob(
                     company,
                     title,
                     dept.isEmpty() ? null : dept,
                     desc,
                     minGpa,
-                    minYear
+                    minYear,
+                    positions
             );
 
             if (ok) {

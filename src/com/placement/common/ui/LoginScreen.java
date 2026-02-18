@@ -13,7 +13,6 @@ import com.placement.company.ui.CompanyDashboardScreen;
 import com.placement.company.dao.CompanyDao;
 import com.placement.company.model.CompanyProfile;
 
-
 public class LoginScreen extends JFrame {
 
     private char defaultEcho;
@@ -213,7 +212,6 @@ public class LoginScreen extends JFrame {
                                 JOptionPane.INFORMATION_MESSAGE
                         );
 
-                        // ✅ Open Admin dashboard (integrated module)
                         if (result.user.getRole() == UserRole.ADMIN) {
                             new AdminDashboard(result.user).setVisible(true);
                             dispose();
@@ -232,14 +230,21 @@ public class LoginScreen extends JFrame {
                                 // keep fallback name
                             }
 
-                            com.placement.company.ui.CompanyDashboardScreen dash =
-                                    new com.placement.company.ui.CompanyDashboardScreen(displayCompanyName);
+                            CompanyDashboardScreen dash =
+                                    new CompanyDashboardScreen(result.user.getId(), displayCompanyName);
 
                             dash.setExtendedState(JFrame.MAXIMIZED_BOTH);
                             dash.setVisible(true);
                             dispose();
                             return;
                         }
+                        
+                        if (result.user.getRole() == UserRole.STUDENT) {
+                            new com.placement.student.ui.StudentDashboardView(result.user.getId()).setVisible(true);
+                            dispose();
+                            return;
+                        }
+
 
 
 

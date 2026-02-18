@@ -7,7 +7,10 @@ public class Application {
     private long studentId;
     private long jobId;
     private Timestamp appliedAt;
-    private String status; // SUBMITTED/SHORTLISTED/REJECTED/OFFERED/WITHDRAWN
+    private String status;
+    private String companyName;
+    private String jobTitle;
+
 
     public Application() {}
 
@@ -26,4 +29,11 @@ public class Application {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    
+    public String getCompanyName() { return companyName; }
+    public void setCompanyName(String companyName) { this.companyName = companyName; }
+
+    public String getJobTitle() { return jobTitle; }
+    public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
+
 }

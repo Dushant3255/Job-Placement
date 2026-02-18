@@ -2,6 +2,7 @@ package com.placement.company.ui;
 
 import com.placement.common.ui.LoginScreen;
 import com.placement.company.dao.CompanyJobDao;
+import com.placement.company.dao.CompanyDao;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -13,10 +14,14 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Ellipse2D;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
 
 public class CompanyDashboardScreen extends JFrame {
 
@@ -27,6 +32,8 @@ public class CompanyDashboardScreen extends JFrame {
     private static final Color TEXT_MUTED = new Color(90, 98, 112);
 
     private final String companyName;
+    private final int companyUserId;
+    private final CompanyDao companyDao = new CompanyDao();
     private final CompanyJobDao jobDao = new CompanyJobDao();
 
     private StatCard activeJobsCard;
@@ -58,10 +65,15 @@ public class CompanyDashboardScreen extends JFrame {
     private static final String VIEW_TABLE = "TABLE";
 
     public CompanyDashboardScreen() {
-        this("Tech Innovations Inc.");
+        this(-1, "Tech Innovations Inc.");
     }
 
     public CompanyDashboardScreen(String companyName) {
+        this(-1, companyName);
+    }
+
+    public CompanyDashboardScreen(int companyUserId, String companyName) {
+        this.companyUserId = companyUserId;
         this.companyName = (companyName == null || companyName.isBlank()) ? "Company" : companyName;
 
         setTitle("Company Dashboard - Student Placement Portal");
@@ -72,7 +84,6 @@ public class CompanyDashboardScreen extends JFrame {
 
         initUI();
 
-        // ✅ Keep dashboard maximized (helps when returning from Applicants too)
         SwingUtilities.invokeLater(() -> setExtendedState(JFrame.MAXIMIZED_BOTH));
     }
 
@@ -136,13 +147,74 @@ public class CompanyDashboardScreen extends JFrame {
             }
         });
 
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        JLabel avatar = buildAvatarLabel(44);
+        avatar.setToolTipText("Company Profile");
+        avatar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        avatar.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (companyUserId <= 0) {
+                    JOptionPane.showMessageDialog(
+                            CompanyDashboardScreen.this,
+                            "Company profile is unavailable because this dashboard was opened without a user id.\n" +
+                                    "Open dashboard using: new CompanyDashboardScreen(userId, companyName)",
+                            "Info",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+                    return;
+                }
+                new CompanyProfileScreen(companyUserId, companyName).setVisible(true);
+                dispose();
+            }
+        });
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         right.setOpaque(false);
+        right.add(avatar);
         right.add(logout);
 
         header.add(left, BorderLayout.WEST);
         header.add(right, BorderLayout.EAST);
         return header;
+    }
+
+    private JLabel buildAvatarLabel(int size) {
+        if (companyUserId <= 0) return makePlaceholderAvatar(size);
+
+        try {
+            String path = companyDao.getLogoPath(companyUserId);
+            if (path == null || path.isBlank()) return makePlaceholderAvatar(size);
+
+            File f = new File(path);
+            if (!f.exists()) return makePlaceholderAvatar(size);
+
+            BufferedImage img = ImageIO.read(f);
+            if (img == null) return makePlaceholderAvatar(size);
+
+            Image scaled = img.getScaledInstance(size, size, Image.SCALE_SMOOTH);
+
+            BufferedImage circ = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = circ.createGraphics();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+            g2.drawImage(scaled, 0, 0, null);
+            g2.dispose();
+
+            JLabel lbl = new JLabel(new ImageIcon(circ));
+            lbl.setPreferredSize(new Dimension(size, size));
+            return lbl;
+        } catch (Exception ex) {
+            return makePlaceholderAvatar(size);
+        }
+    }
+
+    private JLabel makePlaceholderAvatar(int size) {
+        JLabel lbl = new JLabel("\uD83C\uDFE2", SwingConstants.CENTER);
+        lbl.setFont(new Font("Segoe UI Emoji", Font.PLAIN, Math.max(16, size - 22)));
+        lbl.setForeground(Color.WHITE);
+        lbl.setOpaque(true);
+        lbl.setBackground(new Color(255, 255, 255, 35));
+        lbl.setPreferredSize(new Dimension(size, size));
+        return lbl;
     }
 
     private JComponent buildBody() {
@@ -342,6 +414,7 @@ public class CompanyDashboardScreen extends JFrame {
         tableViewApplicantsBtn.addActionListener(e -> openApplicants(selectedTableJob()));
         tableEditBtn.addActionListener(e -> openEditJob(selectedTableJob()));
 
+        // ✅ FIXED: store ok + call new DAO signature
         tableToggleBtn.addActionListener(e -> {
             CompanyJobDao.JobRow job = selectedTableJob();
             if (job == null) return;
@@ -349,7 +422,7 @@ public class CompanyDashboardScreen extends JFrame {
             String cur = (job.status == null) ? "OPEN" : job.status;
             String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
 
-            boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+            boolean ok = jobDao.updateStatus(job.jobId, companyName, newStatus);
             if (!ok) {
                 JOptionPane.showMessageDialog(this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
@@ -535,7 +608,6 @@ public class CompanyDashboardScreen extends JFrame {
         return card;
     }
 
-    // ✅ NEW NAV: hide dashboard (not dispose), open applicants with parent reference
     private void openApplicants(CompanyJobDao.JobRow job) {
         if (job == null) return;
 
@@ -543,6 +615,7 @@ public class CompanyDashboardScreen extends JFrame {
 
         ApplicantsScreen screen = new ApplicantsScreen(this, companyName, job.jobId, job.title);
         screen.setVisible(true);
+        setVisible(false);
     }
 
     /* ============================= Components ============================= */
@@ -784,12 +857,19 @@ public class CompanyDashboardScreen extends JFrame {
             applicants.addActionListener(e -> openApplicants(job));
             edit.addActionListener(e -> openEditJob(job));
 
+            // ✅ FIXED: call new DAO signature
             toggle.addActionListener(e -> {
                 String cur = (job.status == null) ? "OPEN" : job.status;
                 String newStatus = cur.equalsIgnoreCase("OPEN") ? "CLOSED" : "OPEN";
-                boolean ok = jobDao.updateStatus(job.jobId, newStatus);
+
+                boolean ok = jobDao.updateStatus(job.jobId, CompanyDashboardScreen.this.companyName, newStatus);
                 if (!ok) {
-                    JOptionPane.showMessageDialog(CompanyDashboardScreen.this, "Failed to update job status.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(
+                            CompanyDashboardScreen.this,
+                            "Failed to update job status.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                    );
                     return;
                 }
                 loadFromDb();
@@ -828,6 +908,6 @@ public class CompanyDashboardScreen extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new CompanyDashboardScreen("Tech Innovations Inc.").setVisible(true));
+        SwingUtilities.invokeLater(() -> new CompanyDashboardScreen(-1, "Tech Innovations Inc.").setVisible(true));
     }
 }
