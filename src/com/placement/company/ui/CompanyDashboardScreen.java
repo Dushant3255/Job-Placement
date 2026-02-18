@@ -543,6 +543,7 @@ public class CompanyDashboardScreen extends JFrame {
 
         ApplicantsScreen screen = new ApplicantsScreen(this, companyName, job.jobId, job.title);
         screen.setVisible(true);
+        setVisible(false);
     }
 
     /* ============================= Components ============================= */
