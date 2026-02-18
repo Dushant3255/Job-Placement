@@ -37,10 +37,45 @@ public class InterviewDAOImpl implements InterviewDAO {
         Interview i = new Interview();
         i.setInterviewId(rs.getLong("interview_id"));
         i.setApplicationId(rs.getLong("application_id"));
-        i.setScheduledAt(rs.getTimestamp("scheduled_at"));
+
+        // ✅ SQLite stores scheduled_at as TEXT; parse to Timestamp safely
+        i.setScheduledAt(readTimestampSafe(rs, "scheduled_at"));
+
         i.setMeetingLink(rs.getString("meeting_link"));
         i.setMode(rs.getString("mode"));
         i.setStatus(rs.getString("status"));
         return i;
+    }
+
+    private Timestamp readTimestampSafe(ResultSet rs, String col) throws SQLException {
+        // Try JDBC timestamp first (works if stored as real timestamp)
+        try {
+            Timestamp ts = rs.getTimestamp(col);
+            if (ts != null) return ts;
+        } catch (SQLException ignore) {}
+
+        // Fallback: parse TEXT
+        String s = rs.getString(col);
+        if (s == null || s.isBlank()) return null;
+
+        s = s.trim();
+
+        // Handle common SQLite formats:
+        // "yyyy-MM-dd HH:mm:ss"
+        // "yyyy-MM-dd HH:mm:ss.SSS"
+        // "yyyy-MM-ddTHH:mm:ss"
+        // "yyyy-MM-ddTHH:mm:ss.SSS"
+        s = s.replace('T', ' ');
+
+        // If string has no seconds (rare), add ":00"
+        if (s.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$")) {
+            s = s + ":00";
+        }
+
+        try {
+            return Timestamp.valueOf(s);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 }

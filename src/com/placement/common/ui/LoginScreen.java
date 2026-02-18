@@ -213,7 +213,6 @@ public class LoginScreen extends JFrame {
                                 JOptionPane.INFORMATION_MESSAGE
                         );
 
-                        // ✅ Open Admin dashboard (integrated module)
                         if (result.user.getRole() == UserRole.ADMIN) {
                             new AdminDashboard(result.user).setVisible(true);
                             dispose();
@@ -240,6 +239,13 @@ public class LoginScreen extends JFrame {
                             dispose();
                             return;
                         }
+                        
+                        if (result.user.getRole() == UserRole.STUDENT) {
+                            new com.placement.student.ui.StudentDashboardView(result.user.getId()).setVisible(true);
+                            dispose();
+                            return;
+                        }
+
 
 
 

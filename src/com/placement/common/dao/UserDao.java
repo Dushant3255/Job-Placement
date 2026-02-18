@@ -152,6 +152,18 @@ public class UserDao {
             return ps.executeUpdate(); // should be 1
         }
     }
+    
+    public String getEmailByUserId(int userId) throws SQLException {
+        String sql = "SELECT email FROM users WHERE id=?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString("email") : null;
+            }
+        }
+    }
+
 
 
 }

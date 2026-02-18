@@ -151,17 +151,19 @@ public final class DB {
             		""");
 
             		st.execute("""
-            		CREATE TABLE IF NOT EXISTS interviews (
-            		  interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            		  application_id INTEGER NOT NULL,
-            		  scheduled_at TEXT NOT NULL,
-            		  mode TEXT,
-            		  location TEXT,
-            		  status TEXT NOT NULL DEFAULT 'SCHEDULED',
-            		  notes TEXT,
-            		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
-            		);
-            		""");
+    			    CREATE TABLE IF NOT EXISTS interviews (
+    			      interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    			      application_id INTEGER NOT NULL,
+    			      scheduled_at TEXT NOT NULL,
+    			      meeting_link TEXT,
+    			      mode TEXT,
+    			      location TEXT,
+    			      status TEXT NOT NULL DEFAULT 'SCHEDULED',
+    			      notes TEXT,
+    			      FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+    			    );
+        			""");
+
 
             		st.execute("""
             		CREATE TABLE IF NOT EXISTS offers (
@@ -187,6 +189,16 @@ public final class DB {
             		  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
             		);
             		""");
+            		
+            		st.execute("""
+    			    CREATE TABLE IF NOT EXISTS student_documents (
+    			      student_id INTEGER PRIMARY KEY,
+    			      cv_path TEXT,
+    			      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    			      FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+    			    );
+            			""");
+
 
             // Seed a default admin user if none exists (so the Admin panel can be accessed)
             seedDefaultAdmin(con);

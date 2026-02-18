@@ -9,11 +9,13 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 import com.placement.student.ui.StudentCreateAccountScreen;
+import com.placement.student.ui.StudentOnboardingAfterOtpScreen;
 import com.placement.company.ui.CompanyCreateAccountScreen;
 import com.placement.common.service.EmailService;
 import com.placement.common.dao.UserDao;
 import com.placement.common.model.User;
 import com.placement.common.service.OtpService;
+
 
 public class VerifyOtpScreen extends JFrame {
 
@@ -191,8 +193,9 @@ public class VerifyOtpScreen extends JFrame {
     private void onVerifiedSuccess() {
         switch (purpose) {
             case STUDENT_SIGNUP -> {
-                new ProfilePictureScreen(idText, gender, false).setVisible(true);
-                dispose();
+            	new StudentOnboardingAfterOtpScreen(idText, gender).setVisible(true);
+            	dispose();
+
             }
             case COMPANY_SIGNUP -> {
                 new ProfilePictureScreen(idText, null, true).setVisible(true);
