@@ -23,7 +23,7 @@ public class ManageJobPostingsPanel extends JPanel {
 
         add(createTopBar(), BorderLayout.NORTH);
 
-        String[] cols = {"Job ID", "Company", "Title", "Department", "Min GPA", "Min Year", "Status", "Posted"};
+        String[] cols = {"Job ID", "Company", "Title", "Department", "Min GPA", "Min Year", "Hired/Positions", "Status", "Posted"};
         tableModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
@@ -90,6 +90,7 @@ public class ManageJobPostingsPanel extends JPanel {
                     r.department,
                     r.minGpa,
                     r.minYear,
+                    (r.hiredCount + "/" + r.positionsAvailable),
                     r.status,
                     r.postedAt
             });

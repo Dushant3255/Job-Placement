@@ -22,13 +22,17 @@ public class CompanyJobDao {
         public Integer minYear;
         public String eligibilityRule;
         public String status;
-        public String postedAt; // stored as TEXT in SQLite (datetime('now'))
+        
+        public int positionsAvailable;
+        public int hiredCount;
+public String postedAt; // stored as TEXT in SQLite (datetime('now'))
     }
 
     public List<JobRow> listByCompanyName(String companyName) {
         String sql = """
             SELECT job_id, title, department, description,
                    min_gpa, min_year, eligibility_rule,
+                   positions_available, hired_count,
                    status, posted_at
             FROM job_listings
             WHERE company_name = ?
@@ -57,6 +61,9 @@ public class CompanyJobDao {
 
                     r.eligibilityRule = rs.getString("eligibility_rule");
                     r.status = rs.getString("status");
+
+                    r.positionsAvailable = rs.getInt("positions_available");
+                    r.hiredCount = rs.getInt("hired_count");
                     r.postedAt = rs.getString("posted_at");
 
                     out.add(r);
@@ -91,12 +98,13 @@ public class CompanyJobDao {
             String description,
             Double minGpa,
             Integer minYear,
-            String eligibilityRule
+            String eligibilityRule,
+            int positionsAvailable
     ) {
         String sql = """
             INSERT INTO job_listings
-            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN')
+            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, positions_available, hired_count, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'OPEN')
         """;
 
         try (Connection con = DB.getConnection();
@@ -140,6 +148,7 @@ public class CompanyJobDao {
             Double minGpa,
             Integer minYear,
             String eligibilityRule,
+            int positionsAvailable,
             String status
     ) {
         String sql = """
@@ -150,6 +159,7 @@ public class CompanyJobDao {
                 min_gpa=?,
                 min_year=?,
                 eligibility_rule=?,
+                positions_available=?,
                 status=?
             WHERE job_id=? AND company_name=?
         """;
@@ -172,9 +182,10 @@ public class CompanyJobDao {
                     : eligibilityRule.trim()
             );
 
-            ps.setString(7, (status == null || status.isBlank()) ? "OPEN" : status.trim().toUpperCase());
-            ps.setLong(8, jobId);
-            ps.setString(9, companyName);
+            ps.setInt(7, positionsAvailable);
+            ps.setString(8, (status == null || status.isBlank()) ? "OPEN" : status.trim().toUpperCase());
+            ps.setLong(9, jobId);
+            ps.setString(10, companyName);
 
             return ps.executeUpdate() == 1;
 

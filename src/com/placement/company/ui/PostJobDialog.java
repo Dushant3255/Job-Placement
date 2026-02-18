@@ -17,7 +17,7 @@ public class PostJobDialog extends JDialog {
     private final CompanyJobDao jobDao;
     private final Runnable onSuccess;
 
-    private JTextField titleField, deptField, minGpaField, minYearField, ruleField;
+    private JTextField titleField, deptField, minGpaField, minYearField, ruleField, positionsField;
     private JTextArea descArea;
 
     private JButton postBtn;
@@ -90,12 +90,14 @@ public class PostJobDialog extends JDialog {
         minGpaField = new JTextField();
         minYearField = new JTextField();
         ruleField = new JTextField();
+        positionsField = new JTextField();
 
         styleField(titleField);
         styleField(deptField);
         styleField(minGpaField);
         styleField(minYearField);
         styleField(ruleField);
+        styleField(positionsField);
 
         descArea = new JTextArea(8, 30);
         descArea.setLineWrap(true);
@@ -113,6 +115,7 @@ public class PostJobDialog extends JDialog {
         addRow(form, gbc, y++, "Department", deptField);
         addRow(form, gbc, y++, "Min GPA", minGpaField);
         addRow(form, gbc, y++, "Min Year", minYearField);
+        addRow(form, gbc, y++, "Positions Available *", positionsField);
         addRow(form, gbc, y++, "Eligibility Rule", ruleField);
 
         gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
@@ -153,6 +156,17 @@ public class PostJobDialog extends JDialog {
         String desc = descArea.getText().trim();
         String rule = ruleField.getText().trim();
 
+String positionsTxt = positionsField.getText().trim();
+int positionsAvailable;
+try {
+    positionsAvailable = Integer.parseInt(positionsTxt);
+    if (positionsAvailable <= 0) throw new NumberFormatException();
+} catch (NumberFormatException ex) {
+    JOptionPane.showMessageDialog(this, "Positions Available must be a positive integer.", "Validation", JOptionPane.WARNING_MESSAGE);
+    return;
+}
+
+
         Double minGpa = parseDoubleOrNull(minGpaField.getText().trim());
         Integer minYear = parseIntOrNull(minYearField.getText().trim());
 
@@ -161,7 +175,7 @@ public class PostJobDialog extends JDialog {
 
         new SwingWorker<Long, Void>() {
             @Override protected Long doInBackground() {
-                return jobDao.insertJob(companyName, title, dept, desc, minGpa, minYear, rule);
+                return jobDao.insertJob(companyName, title, dept, desc, minGpa, minYear, rule, positionsAvailable);
             }
 
             @Override protected void done() {
