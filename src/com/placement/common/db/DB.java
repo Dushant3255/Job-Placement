@@ -131,7 +131,7 @@ public final class DB {
             		  description TEXT,
             		  min_gpa REAL,
             		  min_year INTEGER,
-            		  eligibility_rule TEXT,
+					  skills TEXT,
                       positions_available INTEGER NOT NULL DEFAULT 0,
                       hired_count INTEGER NOT NULL DEFAULT 0,
                       status TEXT NOT NULL DEFAULT 'OPEN',
@@ -155,17 +155,20 @@ public final class DB {
             		""");
 
             		st.execute("""
-            		CREATE TABLE IF NOT EXISTS interviews (
-            		  interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            		  application_id INTEGER NOT NULL,
-            		  scheduled_at TEXT NOT NULL,
-            		  mode TEXT,
-            		  location TEXT,
-            		  status TEXT NOT NULL DEFAULT 'SCHEDULED',
-            		  notes TEXT,
-            		  FOREIGN KEY(application_id) REFERENCES applications(application_id) ON DELETE CASCADE
-            		);
-            		""");
+            			    CREATE TABLE IF NOT EXISTS interviews (
+            			        interview_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            			        application_id INTEGER NOT NULL,
+            			        scheduled_at TEXT NOT NULL,
+            			        mode TEXT,
+            			        location TEXT,
+            			        meeting_link TEXT,
+            			        status TEXT NOT NULL DEFAULT 'SCHEDULED',
+            			        notes TEXT,
+            			        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            			        FOREIGN KEY (application_id) REFERENCES applications(application_id) ON DELETE CASCADE
+            			    );
+            			""");
+
 
             		st.execute("""
             		CREATE TABLE IF NOT EXISTS offers (
@@ -183,10 +186,26 @@ public final class DB {
             		// --- Lightweight migrations for older DB files ---
                     // Add columns if running against an existing database created before these fields existed.
                     try { st.execute("ALTER TABLE offers ADD COLUMN letter_path TEXT"); } catch (SQLException ignore) {}
+
+                    // jobs: positions + hired + skills
                     try { st.execute("ALTER TABLE job_listings ADD COLUMN positions_available INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
                     try { st.execute("ALTER TABLE job_listings ADD COLUMN hired_count INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
+                    try { st.execute("ALTER TABLE job_listings ADD COLUMN skills TEXT"); } catch (SQLException ignore) {}
+
+                    // If an older DB had eligibility_rule, copy it into skills once.
+                    try {
+                        st.execute("UPDATE job_listings SET skills = eligibility_rule " +
+                                   "WHERE (skills IS NULL OR TRIM(skills)='') AND eligibility_rule IS NOT NULL");
+                    } catch (SQLException ignore) {}
+
                     try { st.execute("ALTER TABLE applications ADD COLUMN admin_confirmed INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignore) {}
                     try { st.execute("ALTER TABLE applications ADD COLUMN admin_confirmed_at TEXT"); } catch (SQLException ignore) {}
+
+                    // interviews: keep location/meeting_link consistent with mode (older DBs may have both filled)
+                    try { st.execute("UPDATE interviews SET location=NULL WHERE lower(mode) LIKE 'online%'"); } catch (SQLException ignore) {}
+                    try { st.execute("UPDATE interviews SET meeting_link=NULL WHERE lower(mode) LIKE 'face%'"); } catch (SQLException ignore) {}
+                    try { st.execute("UPDATE interviews SET location=NULL WHERE location IS NOT NULL AND TRIM(location)=''"); } catch (SQLException ignore) {}
+                    try { st.execute("UPDATE interviews SET meeting_link=NULL WHERE meeting_link IS NOT NULL AND TRIM(meeting_link)=''"); } catch (SQLException ignore) {}
 
                     st.execute("""
                     CREATE TABLE IF NOT EXISTS off_campus_jobs (

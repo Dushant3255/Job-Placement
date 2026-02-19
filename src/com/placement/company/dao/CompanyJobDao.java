@@ -15,7 +15,7 @@ public class CompanyJobDao {
         public String description;
         public Double minGpa;
         public Integer minYear;
-        public String eligibilityRule;
+        public String skills;
         public String status;
         public String postedAt;
 
@@ -26,7 +26,7 @@ public class CompanyJobDao {
     public List<JobRow> listByCompanyName(String companyName) {
         String sql = """
             SELECT job_id, title, department, description,
-                   min_gpa, min_year, eligibility_rule,
+                   min_gpa, min_year, skills,
                    status, posted_at,
                    COALESCE(positions_available, 0) AS positions_available,
                    COALESCE(hired_count, 0) AS hired_count
@@ -74,12 +74,12 @@ public class CompanyJobDao {
             String description,
             Double minGpa,
             Integer minYear,
-            String eligibilityRule,
+            String skills,
             Integer positionsAvailable
     ) {
         String sql = """
             INSERT INTO job_listings
-            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status, positions_available, hired_count)
+            (company_name, title, department, description, min_gpa, min_year, skills, status, positions_available, hired_count)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, 0)
         """;
 
@@ -97,7 +97,7 @@ public class CompanyJobDao {
             if (minYear == null) ps.setNull(6, Types.INTEGER);
             else ps.setInt(6, minYear);
 
-            ps.setString(7, normalizeEligibility(eligibilityRule));
+            ps.setString(7, normalizeSkills(skills));
 
             int pa = (positionsAvailable == null || positionsAvailable < 0) ? 0 : positionsAvailable;
             ps.setInt(8, pa);
@@ -122,7 +122,7 @@ public class CompanyJobDao {
             String description,
             Double minGpa,
             Integer minYear,
-            String eligibilityRule,
+            String skills,
             String status,
             Integer positionsAvailable
     ) {
@@ -133,7 +133,7 @@ public class CompanyJobDao {
                 description=?,
                 min_gpa=?,
                 min_year=?,
-                eligibility_rule=?,
+                skills=?,
                 status=?,
                 positions_available=?
             WHERE job_id=? AND company_name=?
@@ -152,7 +152,7 @@ public class CompanyJobDao {
             if (minYear == null) ps.setNull(5, Types.INTEGER);
             else ps.setInt(5, minYear);
 
-            ps.setString(6, normalizeEligibility(eligibilityRule));
+            ps.setString(6, normalizeSkills(skills));
             ps.setString(7, normalizeStatus(status));
 
             int pa = (positionsAvailable == null || positionsAvailable < 0) ? 0 : positionsAvailable;
@@ -232,7 +232,7 @@ public class CompanyJobDao {
         Object y = rs.getObject("min_year");
         r.minYear = (y == null) ? null : ((Number) y).intValue();
 
-        r.eligibilityRule = rs.getString("eligibility_rule");
+        r.skills = rs.getString("skills");
         r.status = rs.getString("status");
         r.postedAt = rs.getString("posted_at");
 
@@ -241,10 +241,10 @@ public class CompanyJobDao {
         return r;
     }
 
-    private String normalizeEligibility(String eligibilityRule) {
-        return (eligibilityRule == null || eligibilityRule.isBlank())
-                ? "GENERAL"
-                : eligibilityRule.trim();
+    private String normalizeSkills(String skills) {
+        return (skills == null || skills.isBlank())
+                ? ""
+                : skills.trim();
     }
 
     private String normalizeStatus(String status) {

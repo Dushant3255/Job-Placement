@@ -10,7 +10,7 @@ public class JobListing {
     private String description;
     private Double minGpa;
     private Integer minYear;
-    private String eligibilityRule;
+    private String skills;
     private String status; // OPEN/CLOSED
     private Timestamp postedAt;
 
@@ -38,8 +38,8 @@ public class JobListing {
     public Integer getMinYear() { return minYear; }
     public void setMinYear(Integer minYear) { this.minYear = minYear; }
 
-    public String getEligibilityRule() { return eligibilityRule; }
-    public void setEligibilityRule(String eligibilityRule) { this.eligibilityRule = eligibilityRule; }
+    public String getSkills() { return skills; }
+    public void setSkills(String skills) { this.skills = skills; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
