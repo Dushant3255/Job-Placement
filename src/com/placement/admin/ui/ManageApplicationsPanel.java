@@ -32,8 +32,9 @@ public class ManageApplicationsPanel extends JPanel {
     private static final int COL_STUDENT = 4;
     private static final int COL_STUDENT_EMAIL = 5;
     private static final int COL_APP_STATUS = 6;
-    private static final int COL_OFFER_STATUS = 8;
-    private static final int COL_ADMIN_CONFIRMED = 9;
+
+    private static final int COL_OFFER_STATUS = 13;
+    private static final int COL_ADMIN_CONFIRMED = 14;
 
     public ManageApplicationsPanel() {
         setLayout(new BorderLayout(10, 10));
@@ -45,8 +46,11 @@ public class ManageApplicationsPanel extends JPanel {
         String[] cols = {
                 "Application ID", "Job ID", "Company", "Job Title",
                 "Student", "Student Email",
-                "App Status", "Interview At", "Offer Status",
-                "Admin Confirmed", "Applied"
+                "App Status",
+                "Interview At", "Interview Mode", "Office Location", "Meeting Link", "Interview Status", "Interview Notes",
+                "Offer Status",
+                "Admin Confirmed",
+                "Applied"
         };
 
         tableModel = new DefaultTableModel(cols, 0) {
@@ -114,7 +118,7 @@ public class ManageApplicationsPanel extends JPanel {
 
         for (ApplicationRow r : rows) {
             String adminConfirmedText = (r.adminConfirmed == 1) ? "YES" : "NO";
-            tableModel.addRow(new Object[]{
+                        tableModel.addRow(new Object[]{
                     r.applicationId,
                     r.jobId,
                     r.companyName,
@@ -122,7 +126,14 @@ public class ManageApplicationsPanel extends JPanel {
                     r.studentUsername,
                     r.studentEmail,
                     r.status,
+
                     r.interviewScheduledAt == null ? "" : r.interviewScheduledAt,
+                    r.interviewMode == null ? "" : r.interviewMode,
+                    r.interviewLocation == null ? "" : r.interviewLocation,
+                    r.interviewMeetingLink == null ? "" : r.interviewMeetingLink,
+                    r.interviewStatus == null ? "" : r.interviewStatus,
+                    r.interviewNotes == null ? "" : r.interviewNotes,
+
                     r.offerStatus == null ? "" : r.offerStatus,
                     adminConfirmedText,
                     r.appliedAt

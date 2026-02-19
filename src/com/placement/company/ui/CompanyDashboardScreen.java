@@ -297,7 +297,7 @@ public class CompanyDashboardScreen extends JFrame {
                 BorderFactory.createLineBorder(new Color(220, 226, 235), 1, true),
                 BorderFactory.createEmptyBorder(8, 10, 8, 10)
         ));
-        jobSearchField.setToolTipText("Search title / dept / description");
+        jobSearchField.setToolTipText("Search title / dept / skills / description");
 
         statusFilter = new JComboBox<>(new String[]{"All", "OPEN", "CLOSED"});
         statusFilter.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -323,6 +323,12 @@ public class CompanyDashboardScreen extends JFrame {
         refreshBtn = new SoftButton("Refresh", new Color(226, 232, 240), new Color(15, 23, 42));
         refreshBtn.addActionListener(e -> loadFromDb());
 
+        JButton meetingsBtn = new SoftButton("Scheduled Meetings", new Color(226, 232, 240), new Color(15, 23, 42));
+        meetingsBtn.addActionListener(e -> {
+            ScheduledMeetingsDialog dlg = new ScheduledMeetingsDialog(this, companyName);
+            dlg.setVisible(true);
+        });
+
         JButton post = new SolidButton("+ Post New Job", GRAD_START);
         post.addActionListener(e -> {
             PostJobDialog dlg = new PostJobDialog(this, companyName, jobDao, this::loadFromDb);
@@ -334,6 +340,7 @@ public class CompanyDashboardScreen extends JFrame {
         controls.add(cardsBtn);
         controls.add(tableBtn);
         controls.add(refreshBtn);
+        controls.add(meetingsBtn);
         controls.add(post);
 
         top.add(controls, BorderLayout.EAST);
@@ -386,7 +393,7 @@ public class CompanyDashboardScreen extends JFrame {
     }
 
     private JComponent buildTableView() {
-        jobsTableModel = new DefaultTableModel(new Object[]{"Title", "Department", "Posted", "Status"}, 0) {
+        jobsTableModel = new DefaultTableModel(new Object[]{"Title", "Department", "Posted", "Positions", "Status"}, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
 
@@ -520,7 +527,8 @@ public class CompanyDashboardScreen extends JFrame {
             String hay =
                     (j.title == null ? "" : j.title.toLowerCase()) + " " +
                     (j.department == null ? "" : j.department.toLowerCase()) + " " +
-                    (j.description == null ? "" : j.description.toLowerCase());
+                    (j.description == null ? "" : j.description.toLowerCase()) + " " +
+                    (j.skills == null ? "" : j.skills.toLowerCase());
 
             if (hay.contains(q)) filteredJobs.add(j);
         }
@@ -561,6 +569,7 @@ public class CompanyDashboardScreen extends JFrame {
                     j.title,
                     j.department,
                     formatPosted(j.postedAt),
+                    formatPositions(j.hiredCount, j.positionsAvailable),
                     j.status
             });
         }
@@ -598,6 +607,12 @@ public class CompanyDashboardScreen extends JFrame {
         } catch (Exception e) {
             return raw;
         }
+    }
+
+    private static String formatPositions(Integer hiredCount, Integer positionsAvailable) {
+        int hired = hiredCount == null ? 0 : Math.max(0, hiredCount);
+        int total = positionsAvailable == null ? 0 : Math.max(0, positionsAvailable);
+        return hired + "/" + total;
     }
 
     private JComponent wrapAsCard(JComponent inner) {
@@ -827,7 +842,8 @@ public class CompanyDashboardScreen extends JFrame {
             titleRow.add(status);
 
             String deptText = (job.department == null || job.department.isBlank()) ? "—" : job.department;
-            JLabel meta = new JLabel(deptText + "  |  Posted: " + formatPosted(job.postedAt));
+            JLabel meta = new JLabel(deptText + "  |  Posted: " + formatPosted(job.postedAt)
+                    + "  |  Positions: " + formatPositions(job.hiredCount, job.positionsAvailable));
             meta.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             meta.setForeground(TEXT_MUTED);
             meta.setBorder(new EmptyBorder(6, 0, 0, 0));

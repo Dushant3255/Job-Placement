@@ -26,6 +26,12 @@ public class AdminApplicationDao {
 
         // Optional related info
         public String interviewScheduledAt; // from interviews table (latest)
+
+public String interviewMode;
+public String interviewLocation;
+public String interviewMeetingLink;
+public String interviewStatus;      // from interviews table (latest)
+public String interviewNotes;
         public String offerStatus;          // from offers table (latest)
         public String offerIssuedAt;        // from offers table (latest)
         public String offerLetterPath;      // offers.letter_path (latest)
@@ -57,6 +63,47 @@ public class AdminApplicationDao {
                 ORDER BY i.interview_id DESC
                 LIMIT 1
               ) AS interview_scheduled_at,
+
+              (
+                SELECT i.mode
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_mode,
+
+              (
+                SELECT i.location
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_location,
+
+              (
+                SELECT i.meeting_link
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_meeting_link,
+
+              (
+                SELECT i.status
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_status,
+
+              (
+                SELECT i.notes
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_notes,
+
 
               -- Latest offer fields (if any)
               (
@@ -128,6 +175,11 @@ public class AdminApplicationDao {
                     r.adminConfirmedAt = rs.getString("admin_confirmed_at");
 
                     r.interviewScheduledAt = rs.getString("interview_scheduled_at");
+                    r.interviewMode = rs.getString("interview_mode");
+                    r.interviewLocation = rs.getString("interview_location");
+                    r.interviewMeetingLink = rs.getString("interview_meeting_link");
+                    r.interviewStatus = rs.getString("interview_status");
+                    r.interviewNotes = rs.getString("interview_notes");
                     r.offerStatus = rs.getString("offer_status");
                     r.offerIssuedAt = rs.getString("offer_issued_at");
                     r.offerLetterPath = rs.getString("offer_letter_path");

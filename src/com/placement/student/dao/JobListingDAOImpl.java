@@ -89,7 +89,7 @@ public class JobListingDAOImpl implements JobListingDAO {
         j.setDescription(rs.getString("description"));
         j.setMinGpa(rs.getBigDecimal("min_gpa") == null ? null : rs.getBigDecimal("min_gpa").doubleValue());
         j.setMinYear((Integer) rs.getObject("min_year"));
-        j.setEligibilityRule(rs.getString("eligibility_rule"));
+        j.setSkills(rs.getString("skills"));
         j.setStatus(rs.getString("status"));
         j.setPostedAt(rs.getTimestamp("posted_at"));
         return j;

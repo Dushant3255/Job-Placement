@@ -42,6 +42,8 @@ public class InterviewDAOImpl implements InterviewDAO {
         i.setScheduledAt(readTimestampSafe(rs, "scheduled_at"));
 
         i.setMeetingLink(rs.getString("meeting_link"));
+        i.setLocation(rs.getString("location"));
+        i.setNotes(rs.getString("notes"));
         i.setMode(rs.getString("mode"));
         i.setStatus(rs.getString("status"));
         return i;

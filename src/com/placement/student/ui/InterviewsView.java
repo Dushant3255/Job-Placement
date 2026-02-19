@@ -35,12 +35,12 @@ this.studentId = studentId;
         InterviewService interviewService = new InterviewService(interviewDAO);
         this.interviewController = new InterviewController(interviewService);
 
-        model = new DefaultTableModel(new Object[]{"Interview ID", "Application ID", "Scheduled At", "Mode", "Status", "Meeting Link"}, 0) {
+        model = new DefaultTableModel(new Object[]{"Interview ID", "Application ID", "Scheduled At", "Mode", "Office Location", "Meeting Link", "Status", "Notes"}, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
         table = new JTable(model);
         StudentTheme.styleTable(table);
-        table.getColumnModel().getColumn(4).setCellRenderer(StudentTheme.statusChipRenderer());
+        table.getColumnModel().getColumn(6).setCellRenderer(StudentTheme.statusChipRenderer());
         table.getColumnModel().getColumn(3).setCellRenderer(StudentTheme.statusChipRenderer());
 
         add(StudentTheme.header("Interviews", "View interview schedule and open meeting links."), BorderLayout.NORTH);
@@ -97,13 +97,15 @@ this.studentId = studentId;
             List<Interview> interviews = interviewController.viewMyInterviews(studentId);
             model.setRowCount(0);
             for (Interview i : interviews) {
-                model.addRow(new Object[]{
+                                model.addRow(new Object[]{
                         i.getInterviewId(),
                         i.getApplicationId(),
                         i.getScheduledAt(),
                         i.getMode(),
+                        i.getLocation(),
+                        i.getMeetingLink(),
                         i.getStatus(),
-                        i.getMeetingLink()
+                        i.getNotes()
                 });
             }
             if (model.getRowCount() == 0) card.show(tableOrEmpty, "EMPTY");
