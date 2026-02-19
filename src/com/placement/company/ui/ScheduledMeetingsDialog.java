@@ -11,6 +11,11 @@ import java.awt.Desktop;
 import java.net.URI;
 import java.util.List;
 
+/**
+ * Company-side view of all scheduled meetings (interviews).
+ * Includes a details panel + "Start Meeting" to open the meeting link.
+ * Also supports marking a meeting as COMPLETED or CANCELLED.
+ */
 public class ScheduledMeetingsDialog extends JDialog {
 
     // Match Company Dashboard theme
@@ -31,10 +36,9 @@ public class ScheduledMeetingsDialog extends JDialog {
     private JLabel jobVal, studentVal, whenVal, modeVal, statusVal, locationVal;
     private JTextField linkField;
     private JTextArea notesArea;
-
     private JButton startBtn;
     private JButton completeBtn;
-    private JButton cancelBtn; // ✅ NEW
+    private JButton cancelBtn;
 
     public ScheduledMeetingsDialog(JFrame owner, String companyName) {
         super(owner, "Scheduled Meetings", true);
@@ -67,7 +71,7 @@ public class ScheduledMeetingsDialog extends JDialog {
 
     private JComponent buildUI() {
         JPanel root = new JPanel(new BorderLayout());
-        root.setBackground(new Color(245, 247, 251)); // dashboard base bg
+        root.setBackground(new Color(245, 247, 251));
 
         root.add(buildHeader(), BorderLayout.NORTH);
         root.add(buildCenter(), BorderLayout.CENTER);
@@ -90,7 +94,6 @@ public class ScheduledMeetingsDialog extends JDialog {
         iconBox.setPreferredSize(new Dimension(52, 52));
         iconBox.setMaximumSize(new Dimension(52, 52));
         iconBox.setLayout(new GridBagLayout());
-
         JLabel icon = new JLabel("\uD83D\uDCC6"); // 📆
         icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
         icon.setForeground(Color.WHITE);
@@ -123,10 +126,10 @@ public class ScheduledMeetingsDialog extends JDialog {
         fl.setForeground(new Color(241, 245, 249));
         fl.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
-        styleCombo(statusFilter);
-
         JButton refreshBtn = new SoftButton("Refresh", new Color(255, 255, 255, 45), Color.WHITE);
         refreshBtn.addActionListener(e -> refresh());
+
+        styleCombo(statusFilter);
 
         right.add(fl);
         right.add(statusFilter);
@@ -228,7 +231,7 @@ public class ScheduledMeetingsDialog extends JDialog {
         body.add(linkField, gbc);
         y++;
 
-        // Notes row
+        // Notes row (bigger)
         gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0; gbc.weighty = 0;
         body.add(keyLabel("Notes"), gbc);
         gbc.gridx = 1; gbc.weightx = 1; gbc.weighty = 1;
@@ -243,15 +246,12 @@ public class ScheduledMeetingsDialog extends JDialog {
         footer.setBackground(new Color(245, 247, 251));
         footer.setBorder(new EmptyBorder(0, 16, 14, 16));
 
-        // ✅ Cancel Meeting
-        cancelBtn = new SoftButton("Cancel Meeting", new Color(254, 226, 226), new Color(153, 27, 27));
-        cancelBtn.addActionListener(e -> cancelSelectedMeeting());
+        cancelBtn = new SoftButton("Cancel Interview", new Color(254, 226, 226), new Color(127, 29, 29));
+        cancelBtn.addActionListener(e -> cancelSelected());
 
-        // ✅ Mark Completed
         completeBtn = new SolidButton("Mark Completed", GRAD_START);
         completeBtn.addActionListener(e -> markSelectedCompleted());
 
-        // Start meeting (only when scheduled + has link)
         startBtn = new SolidButton("Start Meeting", GRAD_START);
         startBtn.addActionListener(e -> startSelectedMeeting());
 
@@ -262,12 +262,6 @@ public class ScheduledMeetingsDialog extends JDialog {
         footer.add(completeBtn);
         footer.add(startBtn);
         footer.add(closeBtn);
-
-        // initial state
-        cancelBtn.setEnabled(false);
-        completeBtn.setEnabled(false);
-        startBtn.setEnabled(false);
-
         return footer;
     }
 
@@ -299,14 +293,16 @@ public class ScheduledMeetingsDialog extends JDialog {
         int row = table.getSelectedRow();
         if (row < 0) { clearDetails(); return; }
 
-        String statusFilterValue = String.valueOf(statusFilter.getSelectedItem());
-        List<CompanyInterviewDao.MeetingRow> rows = dao.listMeetings(companyName, statusFilterValue);
+        // Re-fetch current filtered list and match by interviewId
+        String status = String.valueOf(statusFilter.getSelectedItem());
+        List<CompanyInterviewDao.MeetingRow> rows = dao.listMeetings(companyName, status);
 
         long interviewId = ((Number) model.getValueAt(row, 0)).longValue();
         CompanyInterviewDao.MeetingRow selected = null;
         for (CompanyInterviewDao.MeetingRow r : rows) {
             if (r.interviewId == interviewId) { selected = r; break; }
         }
+
         if (selected == null) { clearDetails(); return; }
 
         jobVal.setText(safe(selected.jobTitle));
@@ -319,15 +315,12 @@ public class ScheduledMeetingsDialog extends JDialog {
         linkField.setText(selected.meetingLink == null ? "" : selected.meetingLink);
         notesArea.setText(selected.notes == null ? "" : selected.notes);
 
-        boolean isScheduled = "SCHEDULED".equalsIgnoreCase(selected.status);
-
-        // Start only when scheduled AND has link (online). Face-to-face won't have link.
         boolean hasLink = selected.meetingLink != null && !selected.meetingLink.trim().isEmpty();
-        startBtn.setEnabled(isScheduled && hasLink);
+        startBtn.setEnabled(hasLink);
 
-        // Only allow changing status when scheduled
-        completeBtn.setEnabled(isScheduled);
-        cancelBtn.setEnabled(isScheduled);
+        boolean sched = "SCHEDULED".equalsIgnoreCase(selected.status);
+        completeBtn.setEnabled(sched);
+        cancelBtn.setEnabled(sched);
     }
 
     private void clearDetails() {
@@ -339,7 +332,6 @@ public class ScheduledMeetingsDialog extends JDialog {
         locationVal.setText("—");
         linkField.setText("");
         notesArea.setText("");
-
         startBtn.setEnabled(false);
         completeBtn.setEnabled(false);
         cancelBtn.setEnabled(false);
@@ -360,13 +352,9 @@ public class ScheduledMeetingsDialog extends JDialog {
             return;
         }
 
-        String currentStatus = safe(statusVal.getText());
-        if ("COMPLETED".equalsIgnoreCase(currentStatus)) {
+        String currentStatus = statusVal.getText();
+        if (currentStatus != null && currentStatus.trim().equalsIgnoreCase("COMPLETED")) {
             JOptionPane.showMessageDialog(this, "This meeting is already completed.", "Mark Completed", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        if (!"SCHEDULED".equalsIgnoreCase(currentStatus)) {
-            JOptionPane.showMessageDialog(this, "Only SCHEDULED meetings can be completed.", "Mark Completed", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -388,31 +376,22 @@ public class ScheduledMeetingsDialog extends JDialog {
         }
     }
 
-    // ✅ NEW
-    private void cancelSelectedMeeting() {
+    private void cancelSelected() {
         Long id = selectedInterviewId();
         if (id == null) {
-            JOptionPane.showMessageDialog(this, "Select a meeting first.", "Cancel Meeting", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Select a meeting first.", "Cancel Interview", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        String currentStatus = safe(statusVal.getText());
-        if ("CANCELLED".equalsIgnoreCase(currentStatus)) {
-            JOptionPane.showMessageDialog(this, "This meeting is already cancelled.", "Cancel Meeting", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        if ("COMPLETED".equalsIgnoreCase(currentStatus)) {
-            JOptionPane.showMessageDialog(this, "Completed meetings cannot be cancelled.", "Cancel Meeting", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        if (!"SCHEDULED".equalsIgnoreCase(currentStatus)) {
-            JOptionPane.showMessageDialog(this, "Only SCHEDULED meetings can be cancelled.", "Cancel Meeting", JOptionPane.WARNING_MESSAGE);
+        String currentStatus = statusVal.getText();
+        if (currentStatus != null && currentStatus.trim().equalsIgnoreCase("CANCELLED")) {
+            JOptionPane.showMessageDialog(this, "This interview is already cancelled.", "Cancel Interview", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
         int ok = JOptionPane.showConfirmDialog(this,
-                "Cancel this meeting? (Status will become CANCELLED)",
-                "Confirm Cancel",
+                "Cancel this interview?",
+                "Confirm",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
         if (ok != JOptionPane.YES_OPTION) return;
@@ -421,10 +400,10 @@ public class ScheduledMeetingsDialog extends JDialog {
             boolean updated = dao.updateMeetingStatus(id, "CANCELLED");
             if (!updated) throw new RuntimeException("No rows updated.");
 
-            JOptionPane.showMessageDialog(this, "Meeting cancelled.", "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Interview cancelled.", "Success", JOptionPane.INFORMATION_MESSAGE);
             refresh();
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Failed to cancel meeting: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Failed to cancel: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -439,17 +418,7 @@ public class ScheduledMeetingsDialog extends JDialog {
         String link = selectedMeetingLink();
         if (link == null) {
             JOptionPane.showMessageDialog(this,
-                    "This meeting does not have a link (Face-to-face interviews use Office Location).",
-                    "Start Meeting",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        // Block starting if not scheduled (extra safety)
-        String st = safe(statusVal.getText());
-        if (!"SCHEDULED".equalsIgnoreCase(st)) {
-            JOptionPane.showMessageDialog(this,
-                    "Only SCHEDULED meetings can be started.",
+                    "This meeting does not have a link (Face-to-face interviews have Office Location instead).",
                     "Start Meeting",
                     JOptionPane.WARNING_MESSAGE);
             return;
@@ -503,9 +472,7 @@ public class ScheduledMeetingsDialog extends JDialog {
     }
 
     private static String safe(String s) {
-        if (s == null) return "—";
-        String t = s.trim();
-        return t.isEmpty() ? "—" : t;
+        return (s == null || s.trim().isEmpty()) ? "—" : s;
     }
 
     /* ---------- small UI helpers ---------- */

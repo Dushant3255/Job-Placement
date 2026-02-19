@@ -21,26 +21,25 @@ public class CompanyApplicationDao {
     }
 
     public List<ApplicationRow> listApplicantsForJob(String companyName, long jobId) {
-        String sql = """
-            SELECT
-              a.application_id,
-              a.student_id,
-              a.status,
-              a.applied_at,
-              a.resume_path,
-              u.email,
-              s.first_name,
-              s.last_name,
-              ad.gpa,
-              ad.year_of_study
-            FROM applications a
-            JOIN job_listings j ON a.job_id = j.job_id
-            JOIN users u ON a.student_id = u.id
-            LEFT JOIN students s ON s.user_id = u.id
-            LEFT JOIN academic_details ad ON ad.student_id = u.id
-            WHERE j.company_name = ? AND a.job_id = ?
-            ORDER BY a.applied_at DESC
-        """;
+        String sql =
+                "SELECT\n" +
+                "  a.application_id,\n" +
+                "  a.student_id,\n" +
+                "  a.status,\n" +
+                "  a.applied_at,\n" +
+                "  a.resume_path,\n" +
+                "  u.email,\n" +
+                "  s.first_name,\n" +
+                "  s.last_name,\n" +
+                "  ad.gpa,\n" +
+                "  ad.year_of_study\n" +
+                "FROM applications a\n" +
+                "JOIN job_listings j ON a.job_id = j.job_id\n" +
+                "JOIN users u ON a.student_id = u.id\n" +
+                "LEFT JOIN students s ON s.user_id = u.id\n" +
+                "LEFT JOIN academic_details ad ON ad.student_id = u.id\n" +
+                "WHERE j.company_name = ? AND a.job_id = ?\n" +
+                "ORDER BY a.applied_at DESC";
 
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
@@ -61,7 +60,7 @@ public class CompanyApplicationDao {
                     String fn = rs.getString("first_name");
                     String ln = rs.getString("last_name");
                     String name = ((fn == null ? "" : fn) + " " + (ln == null ? "" : ln)).trim();
-                    r.studentName = name.isBlank() ? ("Student #" + r.studentId) : name;
+                    r.studentName = name.isEmpty() ? ("Student #" + r.studentId) : name;
 
                     r.email = rs.getString("email");
 
@@ -80,7 +79,7 @@ public class CompanyApplicationDao {
             throw new RuntimeException("List applicants failed: " + e.getMessage(), e);
         }
     }
-    
+
     public String getApplicationStatus(long applicationId) {
         String sql = "SELECT status FROM applications WHERE application_id=?";
         try (Connection con = DB.getConnection();
@@ -108,70 +107,88 @@ public class CompanyApplicationDao {
         }
     }
 
+    private boolean interviewExists(long applicationId) {
+        String sql = "SELECT 1 FROM interviews WHERE application_id=? LIMIT 1";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setLong(1, applicationId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Interview check failed: " + e.getMessage(), e);
+        }
+    }
+
     public long scheduleInterview(long applicationId,
-        String scheduledAt,
-        String mode,
-        String location,
-        String meetingLink,
-        String notes) {
+                                 String scheduledAt,
+                                 String mode,
+                                 String location,
+                                 String meetingLink,
+                                 String notes) {
 
-    String current = getApplicationStatus(applicationId);
-    if (current != null && current.equalsIgnoreCase("REJECTED")) {
-        throw new RuntimeException("Cannot schedule interview for a rejected applicant.");
-    }
-
-    String m = mode == null ? "" : mode.trim();
-    boolean isOnline = m.equalsIgnoreCase("Online");
-
-    // Normalize inputs & enforce consistency:
-    // - Online: meeting_link required, location MUST be NULL
-    // - Face-to-face: location required, meeting_link MUST be NULL
-    if (isOnline) {
-        meetingLink = meetingLink == null ? null : meetingLink.trim();
-        if (meetingLink == null || meetingLink.isBlank()) {
-            throw new RuntimeException("Meeting link is required for Online interviews.");
-        }
-        location = null;
-    } else {
-        location = location == null ? null : location.trim();
-        if (location == null || location.isBlank()) {
-            throw new RuntimeException("Office location is required for Face-to-face interviews.");
-        }
-        meetingLink = null;
-    }
-
-    notes = notes == null ? null : notes.trim();
-    if (notes != null && notes.isBlank()) notes = null;
-
-    String sql = """
-        INSERT INTO interviews (application_id, scheduled_at, mode, location, meeting_link, status, notes)
-        VALUES (?, ?, ?, ?, ?, 'SCHEDULED', ?)
-    """;
-
-    try (Connection con = DB.getConnection();
-         PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-        ps.setLong(1, applicationId);
-        ps.setString(2, scheduledAt);
-        ps.setString(3, mode);
-
-        // These can be NULL depending on mode (data consistency requirement)
-        ps.setString(4, location);
-        ps.setString(5, meetingLink);
-        ps.setString(6, notes);
-
-        int rows = ps.executeUpdate();
-        if (rows != 1) return -1;
-
-        updateApplicationStatus(applicationId, "INTERVIEW_SCHEDULED");
-
-        try (ResultSet keys = ps.getGeneratedKeys()) {
-            return keys.next() ? keys.getLong(1) : -1;
+        String current = getApplicationStatus(applicationId);
+        if (current != null && current.equalsIgnoreCase("REJECTED")) {
+            throw new RuntimeException("Cannot schedule interview for a rejected applicant.");
         }
 
-    } catch (SQLException e) {
-        throw new RuntimeException("Schedule interview failed: " + e.getMessage(), e);
+        // Prevent scheduling twice for the same application
+        if (interviewExists(applicationId)) {
+            throw new RuntimeException("An interview is already scheduled for this application.");
+        }
+
+        String m = mode == null ? "" : mode.trim();
+        boolean isOnline = m.equalsIgnoreCase("Online");
+
+        // Normalize inputs & enforce consistency:
+        // - Online: meeting_link required, location MUST be NULL
+        // - Face-to-face: location required, meeting_link MUST be NULL
+        if (isOnline) {
+            meetingLink = meetingLink == null ? null : meetingLink.trim();
+            if (meetingLink == null || meetingLink.trim().isEmpty()) {
+                throw new RuntimeException("Meeting link is required for Online interviews.");
+            }
+            location = null;
+        } else {
+            location = location == null ? null : location.trim();
+            if (location == null || location.trim().isEmpty()) {
+                throw new RuntimeException("Office location is required for Face-to-face interviews.");
+            }
+            meetingLink = null;
+        }
+
+        notes = notes == null ? null : notes.trim();
+        if (notes != null && notes.isEmpty()) notes = null;
+
+        String sql =
+                "INSERT INTO interviews (application_id, scheduled_at, mode, location, meeting_link, status, notes) " +
+                "VALUES (?, ?, ?, ?, ?, 'SCHEDULED', ?)";
+
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+            ps.setLong(1, applicationId);
+            ps.setString(2, scheduledAt);
+            ps.setString(3, mode);
+            ps.setString(4, location);   // NULL when online
+            ps.setString(5, meetingLink); // NULL when face-to-face
+            ps.setString(6, notes);
+
+            int rows = ps.executeUpdate();
+            if (rows != 1) return -1;
+
+            updateApplicationStatus(applicationId, "INTERVIEW_SCHEDULED");
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                return keys.next() ? keys.getLong(1) : -1;
+            }
+
+        } catch (SQLException e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (msg.contains("unique") || msg.contains("constraint")) {
+                throw new RuntimeException("An interview is already scheduled for this application.", e);
+            }
+            throw new RuntimeException("Schedule interview failed: " + e.getMessage(), e);
+        }
     }
 }
-}
-

@@ -13,8 +13,12 @@ public class ApplicationDAOImpl implements ApplicationDAO {
 
     @Override
     public long apply(long studentId, long jobId) {
-        // ✅ Use APPLIED (matches company/admin side)
-        // ✅ Save resume_path automatically from student_documents (if available)
+        // Block duplicates at app level (DB also has a unique index)
+        if (hasApplied(studentId, jobId)) {
+            throw new RuntimeException("You have already applied for this job.");
+        }
+
+        // Save resume_path automatically from student_documents (if available)
         String sql = "INSERT INTO applications (student_id, job_id, status, resume_path) VALUES (?,?, 'APPLIED', ?)";
 
         try (Connection con = DB.getConnection()) {
@@ -34,13 +38,18 @@ public class ApplicationDAOImpl implements ApplicationDAO {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException("Apply failed (maybe already applied): " + e.getMessage(), e);
+            // If unique index fires, give a clean message
+            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (msg.contains("unique") || msg.contains("constraint")) {
+                throw new RuntimeException("You have already applied for this job.", e);
+            }
+            throw new RuntimeException("Apply failed: " + e.getMessage(), e);
         }
     }
 
     @Override
     public List<Application> getByStudent(long studentId) {
-        // ✅ Join job_listings to fetch company + job title for Student UI tables
+        // Join job_listings to fetch company + job title for Student UI tables
         String sql =
                 "SELECT a.*, " +
                 "       j.company_name AS company_name, " +
@@ -82,6 +91,36 @@ public class ApplicationDAOImpl implements ApplicationDAO {
         }
     }
 
+    @Override
+    public boolean hasApplied(long studentId, long jobId) {
+        String sql = "SELECT 1 FROM applications WHERE student_id=? AND job_id=? LIMIT 1";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setLong(1, studentId);
+            ps.setLong(2, jobId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Check applied failed: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public String getStatusForJob(long studentId, long jobId) {
+        String sql = "SELECT status FROM applications WHERE student_id=? AND job_id=? ORDER BY applied_at DESC LIMIT 1";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setLong(1, studentId);
+            ps.setLong(2, jobId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Get application status failed: " + e.getMessage(), e);
+        }
+    }
+
     // ----------------- helpers -----------------
 
     private String getStudentCvPath(Connection con, long studentId) throws SQLException {
@@ -100,12 +139,12 @@ public class ApplicationDAOImpl implements ApplicationDAO {
         a.setStudentId(rs.getLong("student_id"));
         a.setJobId(rs.getLong("job_id"));
 
-        // ✅ SQLite may store datetime as TEXT, so parse safely
+        // SQLite may store datetime as TEXT, so parse safely
         a.setAppliedAt(readTimestampSafe(rs, "applied_at"));
 
         a.setStatus(rs.getString("status"));
 
-        // ✅ these fields were added in Step 6
+        // Optional joined fields
         try { a.setCompanyName(rs.getString("company_name")); } catch (SQLException ignore) {}
         try { a.setJobTitle(rs.getString("job_title")); } catch (SQLException ignore) {}
 
@@ -120,11 +159,13 @@ public class ApplicationDAOImpl implements ApplicationDAO {
 
         try {
             String s = rs.getString(col);
-            if (s == null || s.isBlank()) return null;
+            if (s == null) return null;
+            s = s.trim();
+            if (s.isEmpty()) return null;
 
             // Common SQLite datetime('now') format: "YYYY-MM-DD HH:MM:SS"
             DateTimeFormatter f = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            LocalDateTime ldt = LocalDateTime.parse(s.trim(), f);
+            LocalDateTime ldt = LocalDateTime.parse(s, f);
             return Timestamp.valueOf(ldt);
         } catch (Exception ignore) {
             return null;

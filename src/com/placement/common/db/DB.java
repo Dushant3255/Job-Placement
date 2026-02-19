@@ -183,6 +183,19 @@ public final class DB {
             		);
             		""");
 
+
+					// --- Data integrity: prevent duplicates (student/job, interview/application, offer/application) ---
+					// Clean up historical duplicates so the unique indexes below can be created.
+					try { st.execute("DELETE FROM applications WHERE application_id NOT IN (SELECT MIN(application_id) FROM applications GROUP BY student_id, job_id)"); } catch (SQLException ignore) {}
+					try { st.execute("DELETE FROM interviews WHERE interview_id NOT IN (SELECT MIN(interview_id) FROM interviews GROUP BY application_id)"); } catch (SQLException ignore) {}
+					try { st.execute("DELETE FROM offers WHERE offer_id NOT IN (SELECT MIN(offer_id) FROM offers GROUP BY application_id)"); } catch (SQLException ignore) {}
+
+					// Enforce 1 application per student per job, 1 interview per application, 1 offer per application
+					try { st.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_app_student_job ON applications(student_id, job_id)"); } catch (SQLException ignore) {}
+					try { st.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_interview_application ON interviews(application_id)"); } catch (SQLException ignore) {}
+					try { st.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_offer_application ON offers(application_id)"); } catch (SQLException ignore) {}
+
+
             		// --- Lightweight migrations for older DB files ---
                     // Add columns if running against an existing database created before these fields existed.
                     try { st.execute("ALTER TABLE offers ADD COLUMN letter_path TEXT"); } catch (SQLException ignore) {}

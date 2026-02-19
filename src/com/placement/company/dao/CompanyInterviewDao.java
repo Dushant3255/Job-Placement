@@ -100,7 +100,7 @@ public class CompanyInterviewDao {
         return r;
     }
 
-    /** Mark a meeting's status, e.g. to COMPLETED. */
+    /** Update a meeting's status, e.g. to COMPLETED or CANCELLED. */
     public boolean updateMeetingStatus(long interviewId, String newStatus) {
         if (isBlank(newStatus)) throw new IllegalArgumentException("Status cannot be empty");
         String status = newStatus.trim().toUpperCase();

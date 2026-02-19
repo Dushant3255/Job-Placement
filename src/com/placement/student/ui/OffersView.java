@@ -8,8 +8,10 @@ import com.placement.student.service.OfferService;
 import com.placement.student.service.ServiceException;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 public class OffersView extends JPanel {
@@ -23,11 +25,14 @@ public class OffersView extends JPanel {
     private final CardLayout card = new CardLayout();
     private final JPanel tableOrEmpty = new JPanel(card);
 
+    // Filters
+    private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{"All", "PENDING", "ACCEPTED", "REJECTED"});
+    private List<Offer> cache = new ArrayList<>();
+
     public OffersView(long studentId) {
-        
         setLayout(new BorderLayout());
         setBackground(StudentTheme.BG);
-this.studentId = studentId;
+        this.studentId = studentId;
 
         OfferDAO offerDAO = new OfferDAOImpl();
         OfferService offerService = new OfferService(offerDAO);
@@ -45,10 +50,12 @@ this.studentId = studentId;
         JPanel center = StudentTheme.contentPanel();
         center.setLayout(new BorderLayout(12, 12));
         center.add(buildTopBar(), BorderLayout.NORTH);
+
         JScrollPane sp = new JScrollPane(table);
         tableOrEmpty.add(sp, "TABLE");
         tableOrEmpty.add(StudentTheme.emptyState("No offers yet", "When companies send offers, they will appear here."), "EMPTY");
         center.add(tableOrEmpty, BorderLayout.CENTER);
+
         center.add(buildActions(), BorderLayout.SOUTH);
         add(center, BorderLayout.CENTER);
 
@@ -56,20 +63,38 @@ this.studentId = studentId;
     }
 
     private JPanel buildTopBar() {
-        JPanel p = new JPanel(new BorderLayout());
-        p.setBackground(StudentTheme.BG);
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(StudentTheme.BG);
 
         JLabel title = new JLabel("Offers for Student ID: " + studentId);
         title.setFont(StudentTheme.fontBold(13));
         title.setForeground(new Color(31, 41, 55));
-        p.add(title, BorderLayout.WEST);
+        bar.add(title, BorderLayout.WEST);
 
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        right.setBackground(StudentTheme.BG);
+
+        styleCombo(statusFilter);
+
+        JButton clearBtn = new JButton("Clear");
         JButton refreshBtn = new JButton("Refresh");
+        StudentTheme.styleSecondaryButton(clearBtn);
         StudentTheme.styleSecondaryButton(refreshBtn);
-        refreshBtn.addActionListener(e -> refreshOffers());
-        p.add(refreshBtn, BorderLayout.EAST);
 
-        return p;
+        right.add(new JLabel("Status"));
+        right.add(statusFilter);
+        right.add(clearBtn);
+        right.add(refreshBtn);
+
+        statusFilter.addActionListener(e -> applyFilters());
+        clearBtn.addActionListener(e -> {
+            statusFilter.setSelectedItem("All");
+            applyFilters();
+        });
+        refreshBtn.addActionListener(e -> refreshOffers());
+
+        bar.add(right, BorderLayout.EAST);
+        return bar;
     }
 
     private JPanel buildActions() {
@@ -97,22 +122,33 @@ this.studentId = studentId;
 
     private void refreshOffers() {
         try {
-            List<Offer> offers = offerController.viewOffers(studentId);
-            model.setRowCount(0);
-            for (Offer o : offers) {
-                model.addRow(new Object[]{
-                        o.getOfferId(),
-                        o.getApplicationId(),
-                        o.getJoiningDate(),
-                        o.getStatus(),
-                        o.getIssuedAt()
-                });
-            }
-            if (model.getRowCount() == 0) card.show(tableOrEmpty, "EMPTY");
-            else card.show(tableOrEmpty, "TABLE");
+            cache = offerController.viewOffers(studentId);
+            applyFilters();
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
+    }
+
+    private void applyFilters() {
+        String statusSel = String.valueOf(statusFilter.getSelectedItem());
+
+        model.setRowCount(0);
+        for (Offer o : cache) {
+            if (!"All".equalsIgnoreCase(statusSel)) {
+                if (o.getStatus() == null || !o.getStatus().equalsIgnoreCase(statusSel)) continue;
+            }
+
+            model.addRow(new Object[]{
+                    o.getOfferId(),
+                    o.getApplicationId(),
+                    o.getJoiningDate(),
+                    o.getStatus(),
+                    o.getIssuedAt()
+            });
+        }
+
+        if (model.getRowCount() == 0) card.show(tableOrEmpty, "EMPTY");
+        else card.show(tableOrEmpty, "TABLE");
     }
 
     private long getSelectedOfferId() {
@@ -154,5 +190,13 @@ this.studentId = studentId;
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
+    }
+
+    private void styleCombo(JComboBox<?> combo) {
+        combo.setFont(StudentTheme.fontBold(12));
+        combo.setBackground(new Color(243, 244, 246));
+        combo.setForeground(new Color(31, 41, 55));
+        combo.setBorder(new EmptyBorder(6, 8, 6, 8));
+        combo.setFocusable(false);
     }
 }

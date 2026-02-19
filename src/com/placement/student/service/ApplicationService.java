@@ -22,7 +22,11 @@ public class ApplicationService {
         if (job == null) throw new ServiceException("Job does not exist");
         if (!"OPEN".equalsIgnoreCase(job.getStatus())) throw new ServiceException("Job is not open");
 
-        // DAO throws RuntimeException if already applied; we rethrow as ServiceException for clean UI handling
+        // Prevent duplicate applies (also enforced by DB unique index)
+        if (applicationDAO.hasApplied(studentId, jobId)) {
+            throw new ServiceException("You already applied for this job.");
+        }
+
         try {
             long applicationId = applicationDAO.apply(studentId, jobId);
             if (applicationId <= 0) throw new ServiceException("Application failed (no id returned)");
@@ -38,5 +42,10 @@ public class ApplicationService {
 
     public boolean withdraw(long studentId, long applicationId) {
         return applicationDAO.withdraw(applicationId, studentId);
+    }
+
+    /** Student's application status for a job, or null if not applied. */
+    public String getStatusForJob(long studentId, long jobId) {
+        return applicationDAO.getStatusForJob(studentId, jobId);
     }
 }

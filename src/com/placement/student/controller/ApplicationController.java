@@ -24,4 +24,8 @@ public class ApplicationController {
     public boolean withdrawApplication(long studentId, long applicationId) {
         return applicationService.withdraw(studentId, applicationId);
     }
+
+    public String getStatusForJob(long studentId, long jobId) {
+        return applicationService.getStatusForJob(studentId, jobId);
+    }
 }
