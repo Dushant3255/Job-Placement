@@ -265,40 +265,57 @@ public String interviewNotes;
      * Creates an offer row with PENDING status and attaches letter_path.
      * Also sets the application status to PENDING and marks admin_confirmed=1.
      */
-    public long createOffer(long applicationId, Double packageLpa, String joiningDate, String letterPath) {
-        try (Connection con = DB.getConnection()) {
-            con.setAutoCommit(false);
+public long createOffer(long applicationId, Double packageLpa, String joiningDate, String letterPath) {
+    try (Connection con = DB.getConnection()) {
+        con.setAutoCommit(false);
 
-            long offerId = -1;
-
-            try (PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO offers(application_id, package_lpa, joining_date, status, letter_path) VALUES(?, ?, ?, 'PENDING', ?)",
-                    Statement.RETURN_GENERATED_KEYS)) {
-
-                ps.setLong(1, applicationId);
-                if (packageLpa == null) ps.setNull(2, Types.REAL); else ps.setDouble(2, packageLpa);
-                ps.setString(3, joiningDate);
-                ps.setString(4, letterPath);
-
-                int rows = ps.executeUpdate();
-                if (rows != 1) throw new SQLException("Offer insert failed");
-
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    offerId = keys.next() ? keys.getLong(1) : -1;
+        // Prevent duplicate offers for the same application
+        try (PreparedStatement chk = con.prepareStatement(
+                "SELECT 1 FROM offers WHERE application_id=? LIMIT 1")) {
+            chk.setLong(1, applicationId);
+            try (ResultSet rs = chk.executeQuery()) {
+                if (rs.next()) {
+                    con.rollback();
+                    throw new RuntimeException("An offer has already been created for this application.");
                 }
             }
-
-            try (PreparedStatement ps = con.prepareStatement(
-                    "UPDATE applications SET status='PENDING', admin_confirmed=1, admin_confirmed_at=datetime('now') WHERE application_id=?")) {
-                ps.setLong(1, applicationId);
-                ps.executeUpdate();
-            }
-
-            con.commit();
-            return offerId;
-
-        } catch (SQLException e) {
-            throw new RuntimeException("Create offer failed: " + e.getMessage(), e);
         }
+
+        long offerId = -1;
+
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO offers(application_id, package_lpa, joining_date, status, letter_path) VALUES(?, ?, ?, 'PENDING', ?)",
+                Statement.RETURN_GENERATED_KEYS)) {
+
+            ps.setLong(1, applicationId);
+            if (packageLpa == null) ps.setNull(2, Types.REAL); else ps.setDouble(2, packageLpa);
+            ps.setString(3, joiningDate);
+            ps.setString(4, letterPath);
+
+            int rows = ps.executeUpdate();
+            if (rows != 1) throw new SQLException("Offer insert failed");
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                offerId = keys.next() ? keys.getLong(1) : -1;
+            }
+        }
+
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE applications SET status='PENDING', admin_confirmed=1, admin_confirmed_at=datetime('now') WHERE application_id=?")) {
+            ps.setLong(1, applicationId);
+            ps.executeUpdate();
+        }
+
+        con.commit();
+        return offerId;
+
+    } catch (SQLException e) {
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        if (msg.contains("unique") || msg.contains("constraint")) {
+            throw new RuntimeException("An offer has already been created for this application.", e);
+        }
+        throw new RuntimeException("Create offer failed: " + e.getMessage(), e);
     }
 }
+}
+

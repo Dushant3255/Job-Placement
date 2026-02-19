@@ -21,34 +21,39 @@ public class JobListingsView extends JPanel {
     private final DefaultTableModel model;
     private final JTable table;
 
-    private final JTextField deptField = new JTextField(12);
-    private final JTextField gpaField = new JTextField(6);
-    private final JTextField yearField = new JTextField(6);
+    // Filters
+    private final JTextField deptField = new JTextField(16);
+    private final JTextField gpaField  = new JTextField(8);
+    private final JTextField yearField = new JTextField(8);
 
-    // empty-state support
+    // Empty state
     private final CardLayout card = new CardLayout();
     private final JPanel tableOrEmpty = new JPanel(card);
 
     public JobListingsView(long studentId) {
-        
         setLayout(new BorderLayout());
         setBackground(StudentTheme.BG);
-this.studentId = studentId;
+        this.studentId = studentId;
 
         // --- wiring ---
         JobListingDAO jobDAO = new JobListingDAOImpl();
         ApplicationDAO appDAO = new ApplicationDAOImpl();
+
         JobSearchService jobService = new JobSearchService(jobDAO);
         ApplicationService applicationService = new ApplicationService(appDAO, jobDAO);
+
         this.jobController = new JobController(jobService);
         this.applicationController = new ApplicationController(applicationService);
 
-        model = new DefaultTableModel(new Object[]{"Job ID", "Company", "Title", "Dept", "Min GPA", "Min Year", "Status"}, 0) {
+        // Status column shows student's status for job if applied; else job status
+        model = new DefaultTableModel(new Object[]{
+                "Job ID", "Company", "Title", "Dept", "Min GPA", "Min Year", "Status"
+        }, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
+
         table = new JTable(model);
         StudentTheme.styleTable(table);
-        // Status chip
         table.getColumnModel().getColumn(6).setCellRenderer(StudentTheme.statusChipRenderer());
 
         add(StudentTheme.header("Job Listings", "Browse positions, filter, and apply."), BorderLayout.NORTH);
@@ -59,7 +64,9 @@ this.studentId = studentId;
 
         JScrollPane sp = new JScrollPane(table);
         tableOrEmpty.add(sp, "TABLE");
-        tableOrEmpty.add(StudentTheme.emptyState("No job listings found", "Try All (Past+Current) or adjust your filters."), "EMPTY");
+        tableOrEmpty.add(StudentTheme.emptyState(
+                "No job listings found",
+                "Adjust filters or clear them to see more results."), "EMPTY");
         center.add(tableOrEmpty, BorderLayout.CENTER);
 
         center.add(buildActions(), BorderLayout.SOUTH);
@@ -68,43 +75,70 @@ this.studentId = studentId;
         loadAllOpenJobs();
     }
 
+    /**
+     * Filters UI:
+     * - Two rows (so buttons never wrap and disappear)
+     * - Clear Filters always visible
+     */
     private JPanel buildFilters() {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
-        p.setBackground(StudentTheme.BG);
+        JPanel parent = new JPanel();
+        parent.setBackground(StudentTheme.BG);
+        parent.setLayout(new BoxLayout(parent, BoxLayout.Y_AXIS));
+
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        row1.setBackground(StudentTheme.BG);
+
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        row2.setBackground(StudentTheme.BG);
 
         StudentTheme.styleField(deptField);
         StudentTheme.styleField(gpaField);
         StudentTheme.styleField(yearField);
 
-        JButton allBtn = new JButton("All Open");
-        JButton allAnyBtn = new JButton("All (Past+Current)");
-        JButton deptBtn = new JButton("Search Dept");
-        JButton eligBtn = new JButton("Eligible For Me");
+        JButton allOpenBtn   = new JButton("All Open");
+        JButton allAnyBtn    = new JButton("All (Past+Current)");
+        JButton deptSearchBtn = new JButton("Search Dept");
+        JButton eligibleBtn  = new JButton("Eligible For Me");
+        JButton clearBtn     = new JButton("Clear Filters");
 
-        StudentTheme.styleSecondaryButton(deptBtn);
-        StudentTheme.styleSecondaryButton(eligBtn);
-        StudentTheme.styleSecondaryButton(allBtn);
+        StudentTheme.styleSecondaryButton(allOpenBtn);
         StudentTheme.styleSecondaryButton(allAnyBtn);
+        StudentTheme.styleSecondaryButton(deptSearchBtn);
+        StudentTheme.styleSecondaryButton(eligibleBtn);
+        StudentTheme.styleSecondaryButton(clearBtn);
 
-        p.add(new JLabel("Dept"));
-        p.add(deptField);
-        p.add(deptBtn);
+        // Row 1 (Dept + general list buttons)
+        row1.add(new JLabel("Dept"));
+        row1.add(deptField);
+        row1.add(deptSearchBtn);
+        row1.add(allOpenBtn);
+        row1.add(allAnyBtn);
 
-        p.add(new JLabel("GPA"));
-        p.add(gpaField);
-        p.add(new JLabel("Year"));
-        p.add(yearField);
-        p.add(eligBtn);
+        // Row 2 (Eligibility + clear)
+        row2.add(new JLabel("GPA"));
+        row2.add(gpaField);
+        row2.add(new JLabel("Year"));
+        row2.add(yearField);
+        row2.add(eligibleBtn);
+        row2.add(clearBtn);
 
-        p.add(allBtn);
-        p.add(allAnyBtn);
-
-        allBtn.addActionListener(e -> loadAllOpenJobs());
+        // Actions
+        allOpenBtn.addActionListener(e -> loadAllOpenJobs());
         allAnyBtn.addActionListener(e -> loadAllJobs());
-        deptBtn.addActionListener(e -> loadByDepartment());
-        eligBtn.addActionListener(e -> loadByEligibility());
+        deptSearchBtn.addActionListener(e -> loadByDepartment());
+        eligibleBtn.addActionListener(e -> loadByEligibility());
 
-        return p;
+        // Clear filters: reset fields + reload open jobs
+        clearBtn.addActionListener(e -> {
+            deptField.setText("");
+            gpaField.setText("");
+            yearField.setText("");
+            loadAllOpenJobs();
+        });
+
+        parent.add(row1);
+        parent.add(row2);
+        return parent;
     }
 
     private JPanel buildActions() {
@@ -112,27 +146,30 @@ this.studentId = studentId;
         p.setBackground(StudentTheme.BG);
 
         JButton detailsBtn = new JButton("View Details");
-        JButton applyBtn = new JButton("Apply");
-        JButton closeBtn = new JButton("Close");
+        JButton applyBtn   = new JButton("Apply");
+        JButton clearSelBtn = new JButton("Clear Selection");
+        JButton closeBtn   = new JButton("Close");
 
         StudentTheme.styleSecondaryButton(detailsBtn);
         StudentTheme.stylePrimaryButton(applyBtn);
+        StudentTheme.styleSecondaryButton(clearSelBtn);
         StudentTheme.styleSecondaryButton(closeBtn);
 
         detailsBtn.addActionListener(e -> viewSelectedDetails());
         applyBtn.addActionListener(e -> applyToSelected());
+        clearSelBtn.addActionListener(e -> table.clearSelection());
         closeBtn.addActionListener(e -> StudentNav.goHome(this));
 
         p.add(detailsBtn);
         p.add(applyBtn);
+        p.add(clearSelBtn);
         p.add(closeBtn);
         return p;
     }
 
     private void loadAllOpenJobs() {
         try {
-            List<JobListing> jobs = jobController.viewAllOpenJobs();
-            fillTable(jobs);
+            fillTable(jobController.viewAllOpenJobs());
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
@@ -140,8 +177,7 @@ this.studentId = studentId;
 
     private void loadAllJobs() {
         try {
-            List<JobListing> jobs = jobController.viewAllJobs();
-            fillTable(jobs);
+            fillTable(jobController.viewAllJobs());
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
@@ -149,9 +185,8 @@ this.studentId = studentId;
 
     private void loadByDepartment() {
         try {
-            String dept = deptField.getText().trim();
-            List<JobListing> jobs = jobController.searchByDepartment(dept);
-            fillTable(jobs);
+            String dept = deptField.getText() == null ? "" : deptField.getText().trim();
+            fillTable(jobController.searchByDepartment(dept));
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
@@ -161,8 +196,7 @@ this.studentId = studentId;
         try {
             double gpa = Double.parseDouble(gpaField.getText().trim());
             int year = Integer.parseInt(yearField.getText().trim());
-            List<JobListing> jobs = jobController.filterByEligibility(gpa, year);
-            fillTable(jobs);
+            fillTable(jobController.filterByEligibility(gpa, year));
         } catch (NumberFormatException ex) {
             UiUtil.error("Enter valid GPA and Year.");
         } catch (ServiceException ex) {
@@ -172,7 +206,18 @@ this.studentId = studentId;
 
     private void fillTable(List<JobListing> jobs) {
         model.setRowCount(0);
+
         for (JobListing j : jobs) {
+            // If student already applied, show application status, else job status
+            String myStatus = null;
+            try {
+                myStatus = applicationController.getStatusForJob(studentId, j.getJobId());
+            } catch (Exception ignore) {}
+
+            String statusToShow = (myStatus == null || myStatus.trim().isEmpty())
+                    ? j.getStatus()
+                    : myStatus;
+
             model.addRow(new Object[]{
                     j.getJobId(),
                     j.getCompanyName(),
@@ -180,9 +225,11 @@ this.studentId = studentId;
                     j.getDepartment(),
                     j.getMinGpa(),
                     j.getMinYear(),
-                    j.getStatus()
+                    statusToShow
             });
         }
+
+        table.clearSelection();
 
         if (model.getRowCount() == 0) card.show(tableOrEmpty, "EMPTY");
         else card.show(tableOrEmpty, "TABLE");
@@ -196,6 +243,10 @@ this.studentId = studentId;
         return Long.parseLong(String.valueOf(v));
     }
 
+    private int getSelectedRowIndex() {
+        return table.getSelectedRow();
+    }
+
     private void viewSelectedDetails() {
         long jobId = getSelectedJobId();
         if (jobId <= 0) {
@@ -205,12 +256,16 @@ this.studentId = studentId;
 
         try {
             JobListing j = jobController.viewJobDetails(jobId);
+            String skills = j.getSkills();
+            if (skills == null) skills = "";
+
             UiUtil.info(
                     "Company: " + j.getCompanyName() + "\n" +
                     "Title: " + j.getTitle() + "\n" +
                     "Department: " + j.getDepartment() + "\n" +
-                    "Status: " + j.getStatus() + "\n\n" +
-                    "Description:\n" + j.getDescription()
+                    "Status: " + j.getStatus() + "\n" +
+                    (skills.trim().isEmpty() ? "" : ("Skills: " + skills + "\n")) +
+                    "\nDescription:\n" + j.getDescription()
             );
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
@@ -219,16 +274,31 @@ this.studentId = studentId;
 
     private void applyToSelected() {
         long jobId = getSelectedJobId();
-        if (jobId <= 0) {
+        int row = getSelectedRowIndex();
+
+        if (jobId <= 0 || row < 0) {
             UiUtil.error("Select a job first.");
             return;
         }
+
+        // UI guard: prevent applying twice
+        try {
+            String myStatus = applicationController.getStatusForJob(studentId, jobId);
+            if (myStatus != null && !myStatus.trim().isEmpty()) {
+                UiUtil.error("You already applied for this job. Current status: " + myStatus);
+                return;
+            }
+        } catch (Exception ignore) {}
 
         if (!UiUtil.confirm("Apply to job ID " + jobId + "?")) return;
 
         try {
             long applicationId = applicationController.applyForJob(studentId, jobId);
             UiUtil.info("Applied successfully. Application ID: " + applicationId);
+
+            // Update status immediately
+            model.setValueAt("APPLIED", row, 6);
+
         } catch (ServiceException ex) {
             UiUtil.error(ex.getMessage());
         }
