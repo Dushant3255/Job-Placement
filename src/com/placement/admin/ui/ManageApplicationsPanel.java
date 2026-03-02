@@ -431,5 +431,109 @@ private void confirmStatus() {
         JOptionPane.showMessageDialog(this, "Failed to generate offer letter: " + ex.getMessage(),
                 "Error", JOptionPane.ERROR_MESSAGE);
     }
+
+    JOptionPane.showMessageDialog(this,
+            "Confirm Status is intended for: SHORTLISTED, REJECTED, INTERVIEW_SCHEDULED.");
+}
+
+    /**
+     * Requirement #2:
+     * - If shortlisted, admin uploads offer letter.
+     * - Offer status remains PENDING.
+     * - Email sent to applicant confirming they received an offer letter.
+     * - Student acceptance (in student module) updates offer to ACCEPTED, which later allows admin to update to HIRED.
+     */
+    private void uploadOfferLetter() {
+    long applicationId = getSelectedApplicationId();
+    if (applicationId < 0) return;
+
+    String status = getSelectedStatus();
+    if (status == null || !status.equalsIgnoreCase("SHORTLISTED") || !isSelectedAdminConfirmed()) {
+        JOptionPane.showMessageDialog(this, "Offer letters can only be uploaded for SHORTLISTED applicants.");
+        return;
+    }
+
+    String companyName = getSelectedCompanyName();
+    String jobTitle = getSelectedJobTitle();
+    String applicantName = getSelectedStudentUsername(); // username for now (student profile page can show full name later)
+
+    try {
+        File offersDir = new File("data", "offers");
+        if (!offersDir.exists()) offersDir.mkdirs();
+
+        // Ensure a default template exists
+        File templateFile = new File(offersDir, "default_offer_letter_template.txt");
+        if (!templateFile.exists()) {
+            String defaultTemplate =
+                    "LETTER OF OFFER\n\n"
+                            + "Company: {{COMPANY_NAME}}\n"
+                            + "Application ID: {{APPLICATION_ID}}\n"
+                            + "Applicant: {{APPLICANT_NAME}}\n"
+                            + "Job Title: {{JOB_TITLE}}\n\n"
+                            + "Dear {{APPLICANT_NAME}},\n\n"
+                            + "We are pleased to offer you the position of {{JOB_TITLE}} at {{COMPANY_NAME}}.\n"
+                            + "Please log in to the Job Placement System to review and accept your offer.\n\n"
+                            + "Regards,\n"
+                            + "{{COMPANY_NAME}}\n";
+            Files.writeString(templateFile.toPath(), defaultTemplate);
+        }
+
+        String template = Files.readString(templateFile.toPath());
+
+        String personalized = template
+                .replace("{{COMPANY_NAME}}", companyName == null ? "" : companyName)
+                .replace("{{APPLICATION_ID}}", String.valueOf(applicationId))
+                .replace("{{APPLICANT_NAME}}", applicantName == null ? "" : applicantName)
+                .replace("{{JOB_TITLE}}", jobTitle == null ? "" : jobTitle);
+
+        // Create a per-application letter file (no file explorer)
+        File outFile = new File(offersDir, "offer_" + applicationId + ".txt");
+        Files.writeString(outFile.toPath(), personalized);
+
+        // Create offer row in DB (PENDING) and attach letter path
+        long offerId = dao.createOffer(applicationId, null, null, outFile.toString());
+        if (offerId <= 0) {
+            JOptionPane.showMessageDialog(this, "Failed to save offer in database.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Email notification
+        String to = getSelectedStudentEmail();
+        if (to != null && !to.isBlank()) {
+            try {
+                EmailService email = new EmailService();
+                email.send(
+                        to,
+                        "Offer Letter Available",
+                        "You have received a letter of offer for your application (ID: " + applicationId + ").\n"
+                                + "Company: " + (companyName == null ? "" : companyName) + "\n"
+                                + "Job: " + (jobTitle == null ? "" : jobTitle) + "\n\n"
+                                + "Please log in to the Job Placement System to view the offer and respond.\n"
+                                + "Status: PENDING"
+                );
+            } catch (IllegalStateException missingCreds) {
+                JOptionPane.showMessageDialog(this,
+                        "Offer saved, but email was not sent (missing email configuration).\n"
+                                + missingCreds.getMessage(),
+                        "Email Not Sent",
+                        JOptionPane.WARNING_MESSAGE);
+            } catch (MessagingException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Offer saved, but email failed to send: " + ex.getMessage(),
+                        "Email Failed",
+                        JOptionPane.WARNING_MESSAGE);
+            }
+        }
+
+        JOptionPane.showMessageDialog(this, "Offer letter generated and offer created (PENDING).");
+        load(searchField.getText());
+        table.clearSelection();
+        updateButtonStates();
+
+    } catch (Exception ex) {
+        JOptionPane.showMessageDialog(this, "Failed to generate offer letter: " + ex.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
+    }
+}
 }
 }
