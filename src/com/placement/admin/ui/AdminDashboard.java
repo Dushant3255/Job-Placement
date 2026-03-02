@@ -32,12 +32,16 @@ public class AdminDashboard extends JFrame {
         setLocationRelativeTo(null);
         setResizable(true);
 
-        setJMenuBar(createMenuBar());
+        // Menu bar removed for a cleaner dashboard UI
+        setJMenuBar(null);
 
         JPanel root = new JPanel(new BorderLayout());
+        root.setBackground(AdminTheme.BG);
+
+        root.add(createHeader(), BorderLayout.NORTH);
         root.add(createSidebar(), BorderLayout.WEST);
 
-        contentPanel.setBackground(new Color(245, 245, 245));
+        contentPanel.setBackground(AdminTheme.BG);
         contentPanel.add(createWelcomePanel(), "WELCOME");
         contentPanel.add(new ManageStudentsPanel(), "STUDENTS");
         contentPanel.add(new ManageCompaniesPanel(), "COMPANIES");
@@ -48,10 +52,44 @@ public class AdminDashboard extends JFrame {
         setContentPane(root);
     }
 
+    private JPanel createHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(new Color(25, 25, 25));
+        header.setBorder(new EmptyBorder(14, 18, 14, 18));
+        header.setBorder(BorderFactory.createMatteBorder(
+                0, 0, 2, 0, new Color(90, 90, 90)));
+        header.setPreferredSize(new Dimension(0, 70));
+
+        JPanel left = new JPanel();
+        left.setOpaque(false);
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+
+JPanel leftPanel = new JPanel(new GridBagLayout());
+        leftPanel.setOpaque(false); // IMPORTANT
+        leftPanel.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 0));
+
+        JLabel titleLabel = new JLabel("Admin Dashboard");
+        titleLabel.setForeground(Color.WHITE);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 22));
+
+        leftPanel.add(titleLabel);
+JPanel rightPanel = new JPanel(new GridBagLayout());
+        rightPanel.setOpaque(false);
+        rightPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
+
+
+        header.add(leftPanel, BorderLayout.WEST);
+    
+        return header;
+    }
+
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
+        menuBar.setBackground(AdminTheme.SURFACE);
+        menuBar.setForeground(AdminTheme.TEXT);
 
         JMenu fileMenu = new JMenu("File");
+        fileMenu.setForeground(AdminTheme.TEXT);
         JMenuItem profileItem = new JMenuItem("Profile");
         profileItem.addActionListener(e -> showProfileDialog());
 
@@ -63,6 +101,7 @@ public class AdminDashboard extends JFrame {
         fileMenu.add(logoutItem);
 
         JMenu helpMenu = new JMenu("Help");
+        helpMenu.setForeground(AdminTheme.TEXT);
         JMenuItem aboutItem = new JMenuItem("About");
         aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(
                 this,
@@ -80,25 +119,39 @@ public class AdminDashboard extends JFrame {
     private JPanel createSidebar() {
         JPanel sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
-        sidebar.setBackground(new Color(40, 60, 80));
+        sidebar.setBackground(AdminTheme.SURFACE);
         sidebar.setPreferredSize(new Dimension(220, 600));
-        sidebar.setBorder(new EmptyBorder(20, 0, 0, 0));
+        sidebar.setBorder(new EmptyBorder(0, 0, 0, 0));
+
+        // Top info block (separated visually from the navigation)
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setBackground(AdminTheme.SURFACE);
+        info.setBorder(new EmptyBorder(18, 10, 14, 10));
 
         JLabel adminLabel = new JLabel("Admin Panel");
-        adminLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        adminLabel.setForeground(Color.WHITE);
+        adminLabel.setFont(AdminTheme.fontBold(16));
+        adminLabel.setForeground(AdminTheme.TEXT);
         adminLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        sidebar.add(adminLabel);
 
         JLabel nameLabel = new JLabel(adminUser.getUsername());
-        nameLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        nameLabel.setForeground(new Color(200, 200, 200));
+        nameLabel.setFont(AdminTheme.fontPlain(12));
+        nameLabel.setForeground(AdminTheme.TEXT_MUTED);
         nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        sidebar.add(nameLabel);
 
-        sidebar.add(Box.createVerticalStrut(30));
+        info.add(adminLabel);
+        info.add(Box.createVerticalStrut(6));
+        info.add(nameLabel);
 
-        addMenuButton(sidebar, "Dashboard", "WELCOME");
+        sidebar.add(info);
+
+        JSeparator sep = new JSeparator();
+        sep.setForeground(AdminTheme.BORDER);
+        sep.setBackground(AdminTheme.BORDER);
+        sidebar.add(sep);
+
+        sidebar.add(Box.createVerticalStrut(18));
+addMenuButton(sidebar, "Dashboard", "WELCOME");
         addMenuButton(sidebar, "Manage Students", "STUDENTS");
         addMenuButton(sidebar, "Manage Companies", "COMPANIES");
         addMenuButton(sidebar, "Manage Job Postings", "JOBS");
@@ -109,9 +162,7 @@ public class AdminDashboard extends JFrame {
         JButton logoutButton = new JButton("Logout");
         logoutButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         logoutButton.setMaximumSize(new Dimension(170, 40));
-        logoutButton.setFont(new Font("Arial", Font.BOLD, 12));
-        logoutButton.setBackground(new Color(220, 53, 69));
-        logoutButton.setForeground(Color.WHITE);
+        AdminTheme.styleButton(logoutButton, new Color(220, 38, 38));
         logoutButton.addActionListener(e -> logout());
         sidebar.add(logoutButton);
 
@@ -123,9 +174,9 @@ public class AdminDashboard extends JFrame {
         JButton button = new JButton(label);
         button.setAlignmentX(Component.CENTER_ALIGNMENT);
         button.setMaximumSize(new Dimension(200, 40));
-        button.setFont(new Font("Arial", Font.PLAIN, 12));
-        button.setBackground(new Color(70, 90, 110));
-        button.setForeground(Color.WHITE);
+        button.setFont(AdminTheme.fontPlain(12));
+        button.setBackground(AdminTheme.SURFACE_2);
+        button.setForeground(AdminTheme.TEXT);
         button.setBorder(new EmptyBorder(5, 10, 5, 10));
         button.addActionListener(e -> cardLayout.show(contentPanel, panelName));
         sidebar.add(button);
@@ -133,30 +184,94 @@ public class AdminDashboard extends JFrame {
     }
 
     private JPanel createWelcomePanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBackground(new Color(245, 245, 245));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(AdminTheme.BG);
+        panel.setBorder(new EmptyBorder(18, 18, 18, 18));
 
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(20, 20, 20, 20);
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
 
-        JLabel titleLabel = new JLabel("Welcome to Admin Dashboard");
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 28));
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        panel.add(titleLabel, gbc);
+        JLabel title = new JLabel("Welcome, " + adminUser.getUsername() + "");
+        title.setFont(AdminTheme.fontBold(22));
+        title.setForeground(AdminTheme.TEXT);
 
-        JLabel welcomeMsg = new JLabel("Hello, " + adminUser.getUsername() + "!");
-        welcomeMsg.setFont(new Font("Arial", Font.PLAIN, 18));
-        gbc.gridy = 1;
-        panel.add(welcomeMsg, gbc);
+        JLabel subtitle = new JLabel("Use the sections below to manage the placement system.");
+        subtitle.setFont(AdminTheme.fontPlain(13));
+        subtitle.setForeground(AdminTheme.TEXT_MUTED);
 
-        JLabel infoLabel = new JLabel("<html><br>Select an option from the menu to manage:<br>" +
-                "• Students<br>• Companies<br>• Job Postings<br>• Applications<br></html>");
-        infoLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-        gbc.gridy = 2;
-        panel.add(infoLabel, gbc);
+        top.add(title);
+        top.add(Box.createVerticalStrut(6));
+        top.add(subtitle);
 
+        panel.add(top, BorderLayout.NORTH);
+
+        JPanel grid = new JPanel(new GridLayout(2, 2, 14, 14));
+        grid.setOpaque(false);
+        grid.setBorder(new EmptyBorder(16, 0, 0, 0));
+
+        grid.add(sectionCard(
+                "Students",
+                "Search and filter students by program and year.\nView student academic details and metrics.",
+                "Open Students",
+                "STUDENTS"
+        ));
+
+        grid.add(sectionCard(
+                "Companies",
+                "Search companies. Add a company account and email credentials.\nDelete a company and send confirmation email.",
+                "Open Companies",
+                "COMPANIES"
+        ));
+
+        grid.add(sectionCard(
+                "Job Postings",
+                "Search job listings. Update OPEN/CLOSED status.\nAdd off-campus jobs.",
+                "Open Job Postings",
+                "JOBS"
+        ));
+
+        grid.add(sectionCard(
+                "Applications",
+                "Search applications. Confirm final status.\nUpload offer letters to appear in the student offers page.",
+                "Open Applications",
+                "APPLICATIONS"
+        ));
+
+        panel.add(grid, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JPanel sectionCard(String title, String desc, String btnText, String panelName) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(AdminTheme.SURFACE);
+        card.setBorder(new EmptyBorder(16, 16, 16, 16));
+
+        JLabel t = new JLabel(title);
+        t.setFont(AdminTheme.fontBold(16));
+        t.setForeground(AdminTheme.TEXT);
+
+        JTextArea d = new JTextArea(desc);
+        d.setEditable(false);
+        d.setFocusable(false);
+        d.setOpaque(false);
+        d.setLineWrap(true);
+        d.setWrapStyleWord(true);
+        d.setFont(AdminTheme.fontPlain(12));
+        d.setForeground(AdminTheme.TEXT_MUTED);
+
+        JButton open = new JButton(btnText);
+        AdminTheme.styleButton(open, AdminTheme.ACCENT);
+        open.addActionListener(e -> cardLayout.show(contentPanel, panelName));
+
+        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        bottom.setOpaque(false);
+        bottom.add(open);
+
+        card.add(t, BorderLayout.NORTH);
+        card.add(d, BorderLayout.CENTER);
+        card.add(bottom, BorderLayout.SOUTH);
+        return card;
     }
 
     private void showProfileDialog() {
@@ -166,6 +281,7 @@ public class AdminDashboard extends JFrame {
 
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        panel.setBackground(AdminTheme.BG);
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(10, 10, 10, 10);
@@ -173,15 +289,23 @@ public class AdminDashboard extends JFrame {
 
         gbc.gridx = 0;
         gbc.gridy = 0;
-        panel.add(new JLabel("Username:"), gbc);
+        JLabel u = new JLabel("Username:");
+        AdminTheme.styleLabel(u);
+        panel.add(u, gbc);
         gbc.gridx = 1;
-        panel.add(new JLabel(adminUser.getUsername()), gbc);
+        JLabel uv = new JLabel(adminUser.getUsername());
+        AdminTheme.styleLabel(uv);
+        panel.add(uv, gbc);
 
         gbc.gridx = 0;
         gbc.gridy = 1;
-        panel.add(new JLabel("Email:"), gbc);
+        JLabel e = new JLabel("Email:");
+        AdminTheme.styleLabel(e);
+        panel.add(e, gbc);
         gbc.gridx = 1;
-        panel.add(new JLabel(adminUser.getEmail()), gbc);
+        JLabel ev = new JLabel(adminUser.getEmail());
+        AdminTheme.styleLabel(ev);
+        panel.add(ev, gbc);
 
         dialog.setContentPane(panel);
         dialog.setVisible(true);

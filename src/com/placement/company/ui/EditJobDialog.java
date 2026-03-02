@@ -20,7 +20,7 @@ public class EditJobDialog extends JDialog {
     private final CompanyJobDao.JobRow job;
     private final Runnable onSuccess;
 
-    private JTextField titleField, deptField, minGpaField, minYearField, ruleField, positionsField;
+    private JTextField titleField, deptField, minGpaField, minYearField, skillsField, positionsField;
     private JComboBox<String> statusBox;
     private JTextArea descArea;
 
@@ -95,7 +95,7 @@ public class EditJobDialog extends JDialog {
         deptField = new JTextField();
         minGpaField = new JTextField();
         minYearField = new JTextField();
-        ruleField = new JTextField();
+        skillsField = new JTextField();
         positionsField = new JTextField();
         statusBox = new JComboBox<>(new String[]{"OPEN", "CLOSED"});
 
@@ -103,7 +103,7 @@ public class EditJobDialog extends JDialog {
         styleField(deptField);
         styleField(minGpaField);
         styleField(minYearField);
-        styleField(ruleField);
+        styleField(skillsField);
         styleField(positionsField);
         styleCombo(statusBox);
 
@@ -127,7 +127,7 @@ public class EditJobDialog extends JDialog {
         addRow(form, gbc, y++, "Min GPA", minGpaField);
         addRow(form, gbc, y++, "Min Year", minYearField);
         addRow(form, gbc, y++, "Positions Available *", positionsField);
-        addRow(form, gbc, y++, "Eligibility Rule", ruleField);
+        addRow(form, gbc, y++, "Skills Required", skillsField);
         addRow(form, gbc, y++, "Status", statusBox);
 
         gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
@@ -173,8 +173,8 @@ public class EditJobDialog extends JDialog {
         descArea.setText(n(job.description));
         minGpaField.setText(job.minGpa == null ? "" : String.valueOf(job.minGpa));
         minYearField.setText(job.minYear == null ? "" : String.valueOf(job.minYear));
-        positionsField.setText(String.valueOf(job.positionsAvailable));
-        ruleField.setText(n(job.eligibilityRule));
+        positionsField.setText(job.positionsAvailable == null ? "0" : String.valueOf(job.positionsAvailable));
+        skillsField.setText(n(job.skills));
         statusBox.setSelectedItem(job.status == null ? "OPEN" : job.status.toUpperCase());
     }
 
@@ -187,7 +187,7 @@ public class EditJobDialog extends JDialog {
 
         String dept = deptField.getText().trim();
         String desc = descArea.getText().trim();
-        String rule = ruleField.getText().trim();
+        String skills = skillsField.getText().trim();
         String status = String.valueOf(statusBox.getSelectedItem());
 
         Double minGpa = parseDoubleOrNull(minGpaField.getText().trim());
@@ -208,21 +208,41 @@ try {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
         new SwingWorker<Boolean, Void>() {
-            @Override protected Boolean doInBackground() {
-                return jobDao.updateJob(job.jobId, companyName, title, dept, desc, minGpa, minYear, rule, positionsAvailable, status);
+            @Override
+            protected Boolean doInBackground() {
+                return jobDao.updateJob(
+                        job.jobId,              // ✅ FIX: use job.jobId
+                        companyName,
+                        title,
+                        dept,
+                        desc,
+                        minGpa,
+                        minYear,
+                        skills,
+                        status,
+                        positionsAvailable       // ✅ FIX: return boolean
+                );
             }
 
-            @Override protected void done() {
+            @Override
+            protected void done() {
                 try {
                     boolean ok = get();
                     if (!ok) throw new RuntimeException("Update failed.");
 
-                    JOptionPane.showMessageDialog(EditJobDialog.this, "Job updated successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(EditJobDialog.this,
+                            "Job updated successfully!",
+                            "Success",
+                            JOptionPane.INFORMATION_MESSAGE);
+
                     if (onSuccess != null) onSuccess.run();
                     dispose();
 
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(EditJobDialog.this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(EditJobDialog.this,
+                            "Failed to update job: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 } finally {
                     saveBtn.setEnabled(true);
                     setCursor(Cursor.getDefaultCursor());

@@ -53,6 +53,13 @@ public class JobListingDAOImpl implements JobListingDAO {
             throw new RuntimeException("Find job listing failed: " + e.getMessage(), e);
         }
     }
+    
+    @Override
+    public List<JobListing> getAll() {
+        String sql = "SELECT * FROM job_listings ORDER BY posted_at DESC";
+        return list(sql, ps -> {});
+    }
+
 
     private interface Binder { void bind(PreparedStatement ps) throws SQLException; }
 
@@ -82,7 +89,7 @@ public class JobListingDAOImpl implements JobListingDAO {
         j.setDescription(rs.getString("description"));
         j.setMinGpa(rs.getBigDecimal("min_gpa") == null ? null : rs.getBigDecimal("min_gpa").doubleValue());
         j.setMinYear((Integer) rs.getObject("min_year"));
-        j.setEligibilityRule(rs.getString("eligibility_rule"));
+        j.setSkills(rs.getString("skills"));
         j.setStatus(rs.getString("status"));
         j.setPostedAt(rs.getTimestamp("posted_at"));
         return j;

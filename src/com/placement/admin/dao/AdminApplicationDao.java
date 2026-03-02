@@ -26,6 +26,12 @@ public class AdminApplicationDao {
 
         // Optional related info
         public String interviewScheduledAt; // from interviews table (latest)
+
+public String interviewMode;
+public String interviewLocation;
+public String interviewMeetingLink;
+public String interviewStatus;      // from interviews table (latest)
+public String interviewNotes;
         public String offerStatus;          // from offers table (latest)
         public String offerIssuedAt;        // from offers table (latest)
         public String offerLetterPath;      // offers.letter_path (latest)
@@ -57,6 +63,47 @@ public class AdminApplicationDao {
                 ORDER BY i.interview_id DESC
                 LIMIT 1
               ) AS interview_scheduled_at,
+
+              (
+                SELECT i.mode
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_mode,
+
+              (
+                SELECT i.location
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_location,
+
+              (
+                SELECT i.meeting_link
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_meeting_link,
+
+              (
+                SELECT i.status
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_status,
+
+              (
+                SELECT i.notes
+                FROM interviews i
+                WHERE i.application_id = a.application_id
+                ORDER BY i.interview_id DESC
+                LIMIT 1
+              ) AS interview_notes,
+
 
               -- Latest offer fields (if any)
               (
@@ -128,6 +175,11 @@ public class AdminApplicationDao {
                     r.adminConfirmedAt = rs.getString("admin_confirmed_at");
 
                     r.interviewScheduledAt = rs.getString("interview_scheduled_at");
+                    r.interviewMode = rs.getString("interview_mode");
+                    r.interviewLocation = rs.getString("interview_location");
+                    r.interviewMeetingLink = rs.getString("interview_meeting_link");
+                    r.interviewStatus = rs.getString("interview_status");
+                    r.interviewNotes = rs.getString("interview_notes");
                     r.offerStatus = rs.getString("offer_status");
                     r.offerIssuedAt = rs.getString("offer_issued_at");
                     r.offerLetterPath = rs.getString("offer_letter_path");
@@ -213,40 +265,57 @@ public class AdminApplicationDao {
      * Creates an offer row with PENDING status and attaches letter_path.
      * Also sets the application status to PENDING and marks admin_confirmed=1.
      */
-    public long createOffer(long applicationId, Double packageLpa, String joiningDate, String letterPath) {
-        try (Connection con = DB.getConnection()) {
-            con.setAutoCommit(false);
+public long createOffer(long applicationId, Double packageLpa, String joiningDate, String letterPath) {
+    try (Connection con = DB.getConnection()) {
+        con.setAutoCommit(false);
 
-            long offerId = -1;
-
-            try (PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO offers(application_id, package_lpa, joining_date, status, letter_path) VALUES(?, ?, ?, 'PENDING', ?)",
-                    Statement.RETURN_GENERATED_KEYS)) {
-
-                ps.setLong(1, applicationId);
-                if (packageLpa == null) ps.setNull(2, Types.REAL); else ps.setDouble(2, packageLpa);
-                ps.setString(3, joiningDate);
-                ps.setString(4, letterPath);
-
-                int rows = ps.executeUpdate();
-                if (rows != 1) throw new SQLException("Offer insert failed");
-
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    offerId = keys.next() ? keys.getLong(1) : -1;
+        // Prevent duplicate offers for the same application
+        try (PreparedStatement chk = con.prepareStatement(
+                "SELECT 1 FROM offers WHERE application_id=? LIMIT 1")) {
+            chk.setLong(1, applicationId);
+            try (ResultSet rs = chk.executeQuery()) {
+                if (rs.next()) {
+                    con.rollback();
+                    throw new RuntimeException("An offer has already been created for this application.");
                 }
             }
-
-            try (PreparedStatement ps = con.prepareStatement(
-                    "UPDATE applications SET status='PENDING', admin_confirmed=1, admin_confirmed_at=datetime('now') WHERE application_id=?")) {
-                ps.setLong(1, applicationId);
-                ps.executeUpdate();
-            }
-
-            con.commit();
-            return offerId;
-
-        } catch (SQLException e) {
-            throw new RuntimeException("Create offer failed: " + e.getMessage(), e);
         }
+
+        long offerId = -1;
+
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO offers(application_id, package_lpa, joining_date, status, letter_path) VALUES(?, ?, ?, 'PENDING', ?)",
+                Statement.RETURN_GENERATED_KEYS)) {
+
+            ps.setLong(1, applicationId);
+            if (packageLpa == null) ps.setNull(2, Types.REAL); else ps.setDouble(2, packageLpa);
+            ps.setString(3, joiningDate);
+            ps.setString(4, letterPath);
+
+            int rows = ps.executeUpdate();
+            if (rows != 1) throw new SQLException("Offer insert failed");
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                offerId = keys.next() ? keys.getLong(1) : -1;
+            }
+        }
+
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE applications SET status='PENDING', admin_confirmed=1, admin_confirmed_at=datetime('now') WHERE application_id=?")) {
+            ps.setLong(1, applicationId);
+            ps.executeUpdate();
+        }
+
+        con.commit();
+        return offerId;
+
+    } catch (SQLException e) {
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        if (msg.contains("unique") || msg.contains("constraint")) {
+            throw new RuntimeException("An offer has already been created for this application.", e);
+        }
+        throw new RuntimeException("Create offer failed: " + e.getMessage(), e);
     }
 }
+}
+

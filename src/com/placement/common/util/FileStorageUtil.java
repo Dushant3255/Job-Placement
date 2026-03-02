@@ -94,6 +94,19 @@ public final class FileStorageUtil {
 
         throw new IOException("Default image not found: " + defaultImageName);
     }
+    
+    public static String saveStudentCv(File sourceFile, int userId) throws IOException {
+        ensureDir("data/resume");
+
+        String ext = getCvExt(sourceFile.getName());
+        String fileName = "cv_" + userId + "_" + System.currentTimeMillis() + "." + ext;
+
+        Path dest = Paths.get("data/resumes", fileName);
+        Files.copy(sourceFile.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+        return normalize(dest);
+    }
+
 
     /* =========================
        HELPERS
@@ -117,4 +130,17 @@ public final class FileStorageUtil {
     private static String normalize(Path path) {
         return path.toString().replace("\\", "/");
     }
+    
+    private static String getCvExt(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        int dot = n.lastIndexOf('.');
+        if (dot < 0 || dot == n.length() - 1) return "pdf";
+
+        String ext = n.substring(dot + 1);
+        return switch (ext) {
+            case "pdf", "doc", "docx" -> ext;
+            default -> "pdf";
+        };
+    }
+
 }

@@ -101,7 +101,7 @@ public class AdminJobListingDao {
     ) {
         String sql = """
             INSERT INTO job_listings
-            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, status, positions_available, hired_count)
+            (company_name, title, department, description, min_gpa, min_year, skills, status, positions_available, hired_count)
             VALUES (?, ?, ?, ?, ?, ?, 'OFF_CAMPUS', 'OPEN', ?, 0)
         """;
 

@@ -2,12 +2,7 @@ package com.placement.company.dao;
 
 import com.placement.common.db.DB;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,20 +15,21 @@ public class CompanyJobDao {
         public String description;
         public Double minGpa;
         public Integer minYear;
-        public String eligibilityRule;
+        public String skills;
         public String status;
-        
-        public int positionsAvailable;
-        public int hiredCount;
-public String postedAt; // stored as TEXT in SQLite (datetime('now'))
+        public String postedAt;
+
+        public Integer positionsAvailable;
+        public Integer hiredCount;
     }
 
     public List<JobRow> listByCompanyName(String companyName) {
         String sql = """
             SELECT job_id, title, department, description,
-                   min_gpa, min_year, eligibility_rule,
-                   positions_available, hired_count,
-                   status, posted_at
+                   min_gpa, min_year, skills,
+                   status, posted_at,
+                   COALESCE(positions_available, 0) AS positions_available,
+                   COALESCE(hired_count, 0) AS hired_count
             FROM job_listings
             WHERE company_name = ?
             ORDER BY posted_at DESC
@@ -46,28 +42,7 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
 
             try (ResultSet rs = ps.executeQuery()) {
                 List<JobRow> out = new ArrayList<>();
-                while (rs.next()) {
-                    JobRow r = new JobRow();
-                    r.jobId = rs.getLong("job_id");
-                    r.title = rs.getString("title");
-                    r.department = rs.getString("department");
-                    r.description = rs.getString("description");
-
-                    Object g = rs.getObject("min_gpa");
-                    r.minGpa = (g == null) ? null : ((Number) g).doubleValue();
-
-                    Object y = rs.getObject("min_year");
-                    r.minYear = (y == null) ? null : ((Number) y).intValue();
-
-                    r.eligibilityRule = rs.getString("eligibility_rule");
-                    r.status = rs.getString("status");
-
-                    r.positionsAvailable = rs.getInt("positions_available");
-                    r.hiredCount = rs.getInt("hired_count");
-                    r.postedAt = rs.getString("posted_at");
-
-                    out.add(r);
-                }
+                while (rs.next()) out.add(mapJobRow(rs));
                 return out;
             }
 
@@ -76,13 +51,15 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
         }
     }
 
-    public boolean updateStatus(long jobId, String newStatus) {
-        String sql = "UPDATE job_listings SET status=? WHERE job_id=?";
+    // ✅ must be used everywhere in UI now
+    public boolean updateStatus(long jobId, String companyName, String newStatus) {
+        String sql = "UPDATE job_listings SET status=? WHERE job_id=? AND company_name=?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
 
-            ps.setString(1, newStatus);
+            ps.setString(1, normalizeStatus(newStatus));
             ps.setLong(2, jobId);
+            ps.setString(3, companyName);
             return ps.executeUpdate() == 1;
 
         } catch (SQLException e) {
@@ -90,7 +67,6 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
         }
     }
 
-    // STEP 2.5: INSERT NEW JOB (Post Job dialog)
     public long insertJob(
             String companyName,
             String title,
@@ -98,13 +74,13 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
             String description,
             Double minGpa,
             Integer minYear,
-            String eligibilityRule,
-            int positionsAvailable
+            String skills,
+            Integer positionsAvailable
     ) {
         String sql = """
             INSERT INTO job_listings
-            (company_name, title, department, description, min_gpa, min_year, eligibility_rule, positions_available, hired_count, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'OPEN')
+            (company_name, title, department, description, min_gpa, min_year, skills, status, positions_available, hired_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, 0)
         """;
 
         try (Connection con = DB.getConnection();
@@ -121,11 +97,11 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
             if (minYear == null) ps.setNull(6, Types.INTEGER);
             else ps.setInt(6, minYear);
 
-            ps.setString(7, (eligibilityRule == null || eligibilityRule.isBlank())
-                    ? "GENERAL"
-                    : eligibilityRule.trim()
-            );
-            ps.setInt(8, positionsAvailable);
+            ps.setString(7, normalizeSkills(skills));
+
+            int pa = (positionsAvailable == null || positionsAvailable < 0) ? 0 : positionsAvailable;
+            ps.setInt(8, pa);
+
             int rows = ps.executeUpdate();
             if (rows != 1) return -1;
 
@@ -138,7 +114,6 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
         }
     }
 
-    // ✅ STEP (Edit Job): UPDATE JOB DETAILS
     public boolean updateJob(
             long jobId,
             String companyName,
@@ -147,9 +122,9 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
             String description,
             Double minGpa,
             Integer minYear,
-            String eligibilityRule,
-            int positionsAvailable,
-            String status
+            String skills,
+            String status,
+            Integer positionsAvailable
     ) {
         String sql = """
             UPDATE job_listings
@@ -158,9 +133,9 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
                 description=?,
                 min_gpa=?,
                 min_year=?,
-                eligibility_rule=?,
-                positions_available=?,
-                status=?
+                skills=?,
+                status=?,
+                positions_available=?
             WHERE job_id=? AND company_name=?
         """;
 
@@ -177,13 +152,12 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
             if (minYear == null) ps.setNull(5, Types.INTEGER);
             else ps.setInt(5, minYear);
 
-            ps.setString(6, (eligibilityRule == null || eligibilityRule.isBlank())
-                    ? "GENERAL"
-                    : eligibilityRule.trim()
-            );
+            ps.setString(6, normalizeSkills(skills));
+            ps.setString(7, normalizeStatus(status));
 
-            ps.setInt(7, positionsAvailable);
-            ps.setString(8, (status == null || status.isBlank()) ? "OPEN" : status.trim().toUpperCase());
+            int pa = (positionsAvailable == null || positionsAvailable < 0) ? 0 : positionsAvailable;
+            ps.setInt(8, pa);
+
             ps.setLong(9, jobId);
             ps.setString(10, companyName);
 
@@ -243,5 +217,39 @@ public String postedAt; // stored as TEXT in SQLite (datetime('now'))
         } catch (SQLException e) {
             throw new RuntimeException("Count failed: " + e.getMessage(), e);
         }
+    }
+
+    private JobRow mapJobRow(ResultSet rs) throws SQLException {
+        JobRow r = new JobRow();
+        r.jobId = rs.getLong("job_id");
+        r.title = rs.getString("title");
+        r.department = rs.getString("department");
+        r.description = rs.getString("description");
+
+        Object g = rs.getObject("min_gpa");
+        r.minGpa = (g == null) ? null : ((Number) g).doubleValue();
+
+        Object y = rs.getObject("min_year");
+        r.minYear = (y == null) ? null : ((Number) y).intValue();
+
+        r.skills = rs.getString("skills");
+        r.status = rs.getString("status");
+        r.postedAt = rs.getString("posted_at");
+
+        r.positionsAvailable = rs.getInt("positions_available");
+        r.hiredCount = rs.getInt("hired_count");
+        return r;
+    }
+
+    private String normalizeSkills(String skills) {
+        return (skills == null || skills.isBlank())
+                ? ""
+                : skills.trim();
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) return "OPEN";
+        String s = status.trim().toUpperCase();
+        return (s.equals("OPEN") || s.equals("CLOSED")) ? s : "OPEN";
     }
 }

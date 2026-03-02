@@ -19,7 +19,7 @@ public class ManageJobPostingsPanel extends JPanel {
     public ManageJobPostingsPanel() {
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(15, 15, 15, 15));
-        setBackground(new Color(245, 245, 245));
+        setBackground(AdminTheme.BG);
 
         add(createTopBar(), BorderLayout.NORTH);
 
@@ -32,7 +32,10 @@ public class ManageJobPostingsPanel extends JPanel {
         table.setRowHeight(25);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        AdminTheme.styleTable(table);
+        JScrollPane sp = new JScrollPane(table);
+        AdminTheme.styleScrollPane(sp);
+        add(sp, BorderLayout.CENTER);
 
         add(createBottomBar(), BorderLayout.SOUTH);
 
@@ -41,14 +44,18 @@ public class ManageJobPostingsPanel extends JPanel {
 
     private JPanel createTopBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        bar.setBackground(new Color(200, 200, 200));
+        bar.setBackground(AdminTheme.SURFACE);
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        bar.add(new JLabel("Search:"));
+        JLabel s = new JLabel("Search:");
+        AdminTheme.styleLabel(s);
+        bar.add(s);
+        AdminTheme.styleField(searchField);
         bar.add(searchField);
 
         JButton searchBtn = new JButton("Search");
         searchBtn.addActionListener(e -> load(searchField.getText()));
+        AdminTheme.styleButton(searchBtn, AdminTheme.ACCENT);
         bar.add(searchBtn);
 
         JButton refreshBtn = new JButton("Refresh");
@@ -56,6 +63,7 @@ public class ManageJobPostingsPanel extends JPanel {
             searchField.setText("");
             load(null);
         });
+        AdminTheme.styleButton(refreshBtn, AdminTheme.MUTED_BUTTON);
         bar.add(refreshBtn);
 
         return bar;
@@ -63,15 +71,17 @@ public class ManageJobPostingsPanel extends JPanel {
 
     private JPanel createBottomBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
-        bar.setBackground(new Color(200, 200, 200));
+        bar.setBackground(AdminTheme.SURFACE);
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         JButton updateStatusBtn = new JButton("Update Status");
         updateStatusBtn.addActionListener(e -> updateStatus());
+        AdminTheme.styleButton(updateStatusBtn, AdminTheme.ACCENT);
         bar.add(updateStatusBtn);
         
         JButton addOffCampusBtn = new JButton("Add Off Campus Job");
         addOffCampusBtn.addActionListener(e -> openAddOffCampusDialog());
+        AdminTheme.styleButton(addOffCampusBtn, AdminTheme.MUTED_BUTTON);
         bar.add(addOffCampusBtn);
 
 
@@ -105,7 +115,7 @@ public class ManageJobPostingsPanel extends JPanel {
         }
 
         long jobId = ((Number) tableModel.getValueAt(selectedRow, 0)).longValue();
-        String currentStatus = String.valueOf(tableModel.getValueAt(selectedRow, 6));
+        String currentStatus = String.valueOf(tableModel.getValueAt(selectedRow, 7));
 
         String[] options = {"OPEN", "CLOSED"};
         String newStatus = (String) JOptionPane.showInputDialog(

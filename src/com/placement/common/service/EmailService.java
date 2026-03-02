@@ -111,7 +111,38 @@ public class EmailService {
         send(toEmail, subject, body);
     }
 
-    /* ---------------- Helpers ---------------- */
+    
+public void sendCompanyAccountCreatedEmail(String toEmail, String username, String plainPassword) throws MessagingException {
+    if (disableAllEmails) return;
+
+    String subject = "Company Account Created";
+    String body =
+            "Hello,\n\n" +
+            "An account has been created for your company on the Student Placement Portal.\n\n" +
+            "Username: " + safe(username) + "\n" +
+            "Password: " + safe(plainPassword) + "\n\n" +
+            "Please log in and change your password after your first login.\n\n" +
+            "Regards,\nStudent Placement Portal";
+
+    send(toEmail, subject, body);
+}
+
+public void sendCompanyAccountDeletedEmail(String toEmail, String companyName) throws MessagingException {
+    if (disableAllEmails) return;
+
+    String subject = "Company Account Deleted";
+    String body =
+            "Hello,\n\n" +
+            "This is to confirm that your company account" +
+            ((companyName == null || companyName.isBlank()) ? "" : (" (" + safe(companyName) + ")")) +
+            " has been deleted from the Student Placement Portal by the administrator.\n\n" +
+            "If you believe this is a mistake, please contact support.\n\n" +
+            "Regards,\nStudent Placement Portal";
+
+    send(toEmail, subject, body);
+}
+
+/* ---------------- Helpers ---------------- */
 
     private static boolean parseBool(String v) {
         if (v == null) return false;

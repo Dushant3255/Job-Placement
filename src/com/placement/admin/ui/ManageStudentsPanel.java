@@ -15,11 +15,13 @@ public class ManageStudentsPanel extends JPanel {
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final JTextField searchField = new JTextField(18);
+    private final JComboBox<String> programFilter = new JComboBox<>();
+    private final JComboBox<String> yearFilter = new JComboBox<>();
 
     public ManageStudentsPanel() {
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(15, 15, 15, 15));
-        setBackground(new Color(245, 245, 245));
+        setBackground(AdminTheme.BG);
 
         add(createTopBar(), BorderLayout.NORTH);
 
@@ -29,24 +31,44 @@ public class ManageStudentsPanel extends JPanel {
         };
 
         table = new JTable(tableModel);
-        table.setRowHeight(25);
+        table.setRowHeight(26);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        AdminTheme.styleTable(table);
 
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        JScrollPane sp = new JScrollPane(table);
+        AdminTheme.styleScrollPane(sp);
+        add(sp, BorderLayout.CENTER);
 
+        initFilters();
         load(null);
     }
 
     private JPanel createTopBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        bar.setBackground(new Color(200, 200, 200));
+        bar.setBackground(AdminTheme.SURFACE);
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        bar.add(new JLabel("Search:"));
+        JLabel s1 = new JLabel("Search:");
+        AdminTheme.styleLabel(s1);
+        bar.add(s1);
+        AdminTheme.styleField(searchField);
         bar.add(searchField);
+
+        JLabel s2 = new JLabel("Program:");
+        AdminTheme.styleLabel(s2);
+        bar.add(s2);
+        AdminTheme.styleCombo(programFilter);
+        bar.add(programFilter);
+
+        JLabel s3 = new JLabel("Year:");
+        AdminTheme.styleLabel(s3);
+        bar.add(s3);
+        AdminTheme.styleCombo(yearFilter);
+        bar.add(yearFilter);
 
         JButton searchBtn = new JButton("Search");
         searchBtn.addActionListener(e -> load(searchField.getText()));
+        AdminTheme.styleButton(searchBtn, AdminTheme.ACCENT);
         bar.add(searchBtn);
 
         JButton refreshBtn = new JButton("Refresh");
@@ -54,6 +76,7 @@ public class ManageStudentsPanel extends JPanel {
             searchField.setText("");
             load(null);
         });
+        AdminTheme.styleButton(refreshBtn, AdminTheme.MUTED_BUTTON);
         bar.add(refreshBtn);
 
         return bar;
@@ -61,7 +84,16 @@ public class ManageStudentsPanel extends JPanel {
 
     private void load(String keyword) {
         tableModel.setRowCount(0);
-        List<StudentRow> rows = dao.listAll(keyword);
+
+        String program = String.valueOf(programFilter.getSelectedItem());
+        Integer year = null;
+
+        String yearSel = String.valueOf(yearFilter.getSelectedItem());
+        if (yearSel != null && !"All".equalsIgnoreCase(yearSel)) {
+            try { year = Integer.parseInt(yearSel); } catch (Exception ignore) {}
+        }
+
+        List<StudentRow> rows = dao.listAll(keyword, program, year);
         for (StudentRow r : rows) {
             tableModel.addRow(new Object[]{
                     r.userId,
@@ -74,5 +106,23 @@ public class ManageStudentsPanel extends JPanel {
                     r.cgpa
             });
         }
+    }
+
+    private void initFilters() {
+        programFilter.removeAllItems();
+        programFilter.addItem("All");
+        for (String p : dao.listPrograms()) {
+            programFilter.addItem(p);
+        }
+
+        yearFilter.removeAllItems();
+        yearFilter.addItem("All");
+        for (Integer y : dao.listYears()) {
+            yearFilter.addItem(String.valueOf(y));
+        }
+
+        // Re-load when filter changes
+        programFilter.addActionListener(e -> load(searchField.getText()));
+        yearFilter.addActionListener(e -> load(searchField.getText()));
     }
 }

@@ -17,7 +17,7 @@ public class PostJobDialog extends JDialog {
     private final CompanyJobDao jobDao;
     private final Runnable onSuccess;
 
-    private JTextField titleField, deptField, minGpaField, minYearField, ruleField, positionsField;
+    private JTextField titleField, deptField, minGpaField, minYearField, skillsField, positionsField;
     private JTextArea descArea;
 
     private JButton postBtn;
@@ -89,14 +89,14 @@ public class PostJobDialog extends JDialog {
         deptField  = new JTextField();
         minGpaField = new JTextField();
         minYearField = new JTextField();
-        ruleField = new JTextField();
+        skillsField = new JTextField();
         positionsField = new JTextField();
 
         styleField(titleField);
         styleField(deptField);
         styleField(minGpaField);
         styleField(minYearField);
-        styleField(ruleField);
+        styleField(skillsField);
         styleField(positionsField);
 
         descArea = new JTextArea(8, 30);
@@ -116,7 +116,7 @@ public class PostJobDialog extends JDialog {
         addRow(form, gbc, y++, "Min GPA", minGpaField);
         addRow(form, gbc, y++, "Min Year", minYearField);
         addRow(form, gbc, y++, "Positions Available *", positionsField);
-        addRow(form, gbc, y++, "Eligibility Rule", ruleField);
+        addRow(form, gbc, y++, "Skills Required", skillsField);
 
         gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0;
         form.add(new JLabel("Description"), gbc);
@@ -154,7 +154,7 @@ public class PostJobDialog extends JDialog {
 
         String dept = deptField.getText().trim();
         String desc = descArea.getText().trim();
-        String rule = ruleField.getText().trim();
+        String skills = skillsField.getText().trim();
 
 String positionsTxt = positionsField.getText().trim();
 int positionsAvailable;
@@ -174,21 +174,39 @@ try {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
         new SwingWorker<Long, Void>() {
-            @Override protected Long doInBackground() {
-                return jobDao.insertJob(companyName, title, dept, desc, minGpa, minYear, rule, positionsAvailable);
+            @Override
+            protected Long doInBackground() {
+                return jobDao.insertJob(
+                        companyName,
+                        title,
+                        dept,
+                        desc,
+                        minGpa,
+                        minYear,
+                        skills,
+                        positionsAvailable
+                );
             }
 
-            @Override protected void done() {
+            @Override
+            protected void done() {
                 try {
                     long id = get();
                     if (id <= 0) throw new RuntimeException("Insert failed.");
 
-                    JOptionPane.showMessageDialog(PostJobDialog.this, "Job posted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(PostJobDialog.this,
+                            "Job posted successfully!",
+                            "Success",
+                            JOptionPane.INFORMATION_MESSAGE);
+
                     if (onSuccess != null) onSuccess.run();
                     dispose();
 
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(PostJobDialog.this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(PostJobDialog.this,
+                            "Failed to post job: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 } finally {
                     postBtn.setEnabled(true);
                     setCursor(Cursor.getDefaultCursor());

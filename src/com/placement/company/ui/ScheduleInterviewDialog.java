@@ -21,10 +21,16 @@ public class ScheduleInterviewDialog extends JDialog {
     private JTextField dateField;
     private JTextField timeField;
     private JComboBox<String> modeBox;
-    private JTextField locationField;
-    private JTextArea notesArea;
 
+    private JTextField meetingLinkField;
+    private JTextField locationField;
+
+    private JTextArea notesArea;
     private JButton scheduleBtn;
+
+    // Cache values so switching modes doesn't permanently delete the user's input
+    private String cachedMeetingLink = "";
+    private String cachedLocation = "";
 
     public ScheduleInterviewDialog(JFrame owner,
                                    CompanyApplicationDao.ApplicationRow app,
@@ -35,13 +41,13 @@ public class ScheduleInterviewDialog extends JDialog {
         this.app = app;
         this.onSuccess = onSuccess;
 
-        setSize(720, 520);
+        setSize(720, 580);
         setLocationRelativeTo(owner);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         setContentPane(buildUI());
         prefill();
-        applyModeHint();
+        applyModeHint(); // must run after prefill
     }
 
     private JComponent buildUI() {
@@ -70,7 +76,8 @@ public class ScheduleInterviewDialog extends JDialog {
         iconBox.setMaximumSize(new Dimension(52, 52));
         iconBox.setLayout(new GridBagLayout());
 
-        JLabel icon = new JLabel("\uD83D\uDCC5"); // 📅
+        // Use unicode escape to avoid encoding issues
+        JLabel icon = new JLabel("\uD83D\uDCC5"); // calendar icon
         icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
         icon.setForeground(Color.WHITE);
         iconBox.add(icon);
@@ -119,14 +126,18 @@ public class ScheduleInterviewDialog extends JDialog {
         dateField = new JTextField();
         timeField = new JTextField();
         modeBox = new JComboBox<>(new String[]{"Online", "Face-to-face"});
+
+        meetingLinkField = new JTextField();
         locationField = new JTextField();
 
         styleField(dateField);
         styleField(timeField);
         styleCombo(modeBox);
+        styleField(meetingLinkField);
         styleField(locationField);
 
-        notesArea = new JTextArea(5, 28);
+        // Bigger notes area
+        notesArea = new JTextArea(12, 28);
         notesArea.setLineWrap(true);
         notesArea.setWrapStyleWord(true);
         notesArea.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -137,11 +148,11 @@ public class ScheduleInterviewDialog extends JDialog {
         notesScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
         int y = 0;
-
         addRow(form, gbc, y++, "Date (YYYY-MM-DD)", dateField);
         addRow(form, gbc, y++, "Time (HH:MM)", timeField);
         addRow(form, gbc, y++, "Mode", modeBox);
-        addRow(form, gbc, y++, "Location / Link", locationField);
+        addRow(form, gbc, y++, "Meeting Link (Online)", meetingLinkField);
+        addRow(form, gbc, y++, "Office Location (Face-to-face)", locationField);
 
         // Notes row
         gbc.gridx = 0; gbc.gridy = y; gbc.weightx = 0; gbc.weighty = 0;
@@ -178,7 +189,6 @@ public class ScheduleInterviewDialog extends JDialog {
     }
 
     private void onSchedule() {
-        // UI guard (DAO also guards)
         if (app.status != null && app.status.equalsIgnoreCase("REJECTED")) {
             JOptionPane.showMessageDialog(this,
                     "Rejected applicants cannot be interviewed.",
@@ -187,8 +197,8 @@ public class ScheduleInterviewDialog extends JDialog {
             return;
         }
 
-        String date = dateField.getText().trim();
-        String time = timeField.getText().trim();
+        String date = safeText(dateField.getText());
+        String time = safeText(timeField.getText());
 
         if (!date.matches("\\d{4}-\\d{2}-\\d{2}")) {
             JOptionPane.showMessageDialog(this, "Date must be YYYY-MM-DD.", "Validation", JOptionPane.WARNING_MESSAGE);
@@ -201,21 +211,46 @@ public class ScheduleInterviewDialog extends JDialog {
 
         String scheduledAt = date + " " + time + ":00";
         String mode = String.valueOf(modeBox.getSelectedItem());
-        String location = locationField.getText().trim();
-        String notes = notesArea.getText().trim();
+        boolean online = "Online".equalsIgnoreCase(mode);
 
-        if (location.isBlank()) {
-            JOptionPane.showMessageDialog(this, "Location/Link is required.", "Validation", JOptionPane.WARNING_MESSAGE);
-            return;
+        String meetingLink = safeText(meetingLinkField.getText());
+        String location = safeText(locationField.getText());
+        String notes = safeText(notesArea.getText());
+
+        // Validate + enforce DB consistency (irrelevant column must be NULL)
+        if (online) {
+            if (meetingLink.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        "Meeting Link is required for Online interviews.",
+                        "Validation",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            // store location as NULL
+            location = null;
+        } else {
+            if (location.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        "Office Location is required for Face-to-face interviews.",
+                        "Validation",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            // store meeting link as NULL
+            meetingLink = null;
         }
 
         scheduleBtn.setEnabled(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
+        final String finalLocation = location;
+        final String finalMeetingLink = meetingLink;
+        final String finalNotes = notes;
+
         new SwingWorker<Long, Void>() {
             @Override
             protected Long doInBackground() {
-                return dao.scheduleInterview(app.applicationId, scheduledAt, mode, location, notes);
+                return dao.scheduleInterview(app.applicationId, scheduledAt, mode, finalLocation, finalMeetingLink, finalNotes);
             }
 
             @Override
@@ -223,6 +258,7 @@ public class ScheduleInterviewDialog extends JDialog {
                 try {
                     long id = get();
                     if (id <= 0) throw new RuntimeException("Failed to create interview.");
+
                     JOptionPane.showMessageDialog(ScheduleInterviewDialog.this,
                             "Interview scheduled successfully!",
                             "Success",
@@ -245,25 +281,50 @@ public class ScheduleInterviewDialog extends JDialog {
     }
 
     private void prefill() {
-        // simple defaults
         dateField.setText(java.time.LocalDate.now().plusDays(3).toString());
         timeField.setText("10:00");
+
         modeBox.setSelectedItem("Online");
-        locationField.setText("Google Meet / Zoom link");
+
+        meetingLinkField.setText("");
+        locationField.setText("");
+        notesArea.setText("");
+
+        cachedMeetingLink = "";
+        cachedLocation = "";
     }
 
     private void applyModeHint() {
         String m = String.valueOf(modeBox.getSelectedItem());
-        if ("Online".equalsIgnoreCase(m)) {
-            if (locationField.getText().isBlank() || locationField.getText().toLowerCase().contains("office")) {
-                locationField.setText("Google Meet / Zoom link");
-            }
+        boolean online = "Online".equalsIgnoreCase(m);
+
+        Color disabledBg = new Color(244, 246, 250);
+
+        // Cache current values before switching
+        if (online) {
+            // we are switching to online => cache location
+            cachedLocation = safeText(locationField.getText());
+            // restore meeting link cache
+            meetingLinkField.setText(cachedMeetingLink);
+            // clear location display for clarity
+            locationField.setText("");
         } else {
-            if (locationField.getText().isBlank() || locationField.getText().toLowerCase().contains("zoom")
-                    || locationField.getText().toLowerCase().contains("meet")) {
-                locationField.setText("Office address / Room");
-            }
+            // switching to face-to-face => cache meeting link
+            cachedMeetingLink = safeText(meetingLinkField.getText());
+            // restore location cache
+            locationField.setText(cachedLocation);
+            // clear meeting link display for clarity
+            meetingLinkField.setText("");
         }
+
+        // Online => meeting link enabled, location disabled
+        meetingLinkField.setEnabled(online);
+        meetingLinkField.setEditable(online);
+        meetingLinkField.setBackground(online ? Color.WHITE : disabledBg);
+
+        locationField.setEnabled(!online);
+        locationField.setEditable(!online);
+        locationField.setBackground(!online ? Color.WHITE : disabledBg);
     }
 
     private void addRow(JPanel form, GridBagConstraints gbc, int y, String label, JComponent field) {
@@ -299,14 +360,24 @@ public class ScheduleInterviewDialog extends JDialog {
     }
 
     private static String safe(String s) {
-        return (s == null || s.isBlank()) ? "—" : s;
+        if (s == null) return "—";
+        String t = s.trim();
+        return t.isEmpty() ? "—" : t;
+    }
+
+    private static String safeText(String s) {
+        return (s == null) ? "" : s.trim();
     }
 
     /* ---------- small UI helpers ---------- */
 
     private static class GradientPanel extends JPanel {
         private final Color start, end;
-        GradientPanel(Color start, Color end) { this.start = start; this.end = end; setOpaque(false); }
+        GradientPanel(Color start, Color end) {
+            this.start = start;
+            this.end = end;
+            setOpaque(false);
+        }
         @Override protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g.create();
@@ -318,8 +389,13 @@ public class ScheduleInterviewDialog extends JDialog {
     }
 
     private static class RoundedPanel extends JPanel {
-        private final int radius; private final Color fill;
-        RoundedPanel(int radius, Color fill) { this.radius = radius; this.fill = fill; setOpaque(false); }
+        private final int radius;
+        private final Color fill;
+        RoundedPanel(int radius, Color fill) {
+            this.radius = radius;
+            this.fill = fill;
+            setOpaque(false);
+        }
         @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

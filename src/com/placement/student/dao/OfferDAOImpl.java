@@ -37,13 +37,83 @@ public class OfferDAOImpl implements OfferDAO {
     }
 
     @Override
-public boolean updateStatus(long offerId, long studentId, String status) throws SQLException {
+    public boolean updateStatus(long offerId, long studentId, String status) throws SQLException {
+        if (status == null || status.isBlank()) return false;
 
-    try (Connection conn = DB.getConnection()) {
-        conn.setAutoCommit(false);
+        String newStatus = status.trim().toUpperCase();
 
-        // 1) Update offer status (only if it belongs to the student's application)
-        String updateOffer = """
+        try (Connection con = DB.getConnection()) {
+            con.setAutoCommit(false);
+
+            try {
+                // 1) Verify ownership + fetch related ids
+                OfferContext ctx = getOfferContext(con, offerId, studentId);
+                if (ctx == null) {
+                    con.rollback();
+                    return false;
+                }
+
+                String prevOfferStatus = (ctx.offerStatus == null) ? "" : ctx.offerStatus.trim().toUpperCase();
+
+                // 2) Update offer status
+                if (!updateOfferStatus(con, offerId, studentId, newStatus)) {
+                    con.rollback();
+                    return false;
+                }
+
+                // 3) If ACCEPTED and wasn't already accepted -> update application + hired_count (+ auto-close)
+                if ("ACCEPTED".equals(newStatus) && !"ACCEPTED".equals(prevOfferStatus)) {
+                    updateApplicationStatusAccepted(con, ctx.applicationId, studentId);
+                    incrementHiredAndMaybeClose(con, ctx.jobId);
+                }
+
+                con.commit();
+                return true;
+
+            } catch (SQLException ex) {
+                con.rollback();
+                throw ex;
+            } finally {
+                con.setAutoCommit(true);
+            }
+        }
+    }
+
+    // ----------------- helpers -----------------
+
+    private static class OfferContext {
+        long applicationId;
+        long jobId;
+        String offerStatus;
+    }
+
+    private OfferContext getOfferContext(Connection con, long offerId, long studentId) throws SQLException {
+        String sql = """
+            SELECT o.application_id, a.job_id, o.status AS offer_status
+            FROM offers o
+            JOIN applications a ON o.application_id = a.application_id
+            WHERE o.offer_id = ? AND a.student_id = ?
+            LIMIT 1
+        """;
+
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setLong(1, offerId);
+            ps.setLong(2, studentId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+
+                OfferContext ctx = new OfferContext();
+                ctx.applicationId = rs.getLong("application_id");
+                ctx.jobId = rs.getLong("job_id");
+                ctx.offerStatus = rs.getString("offer_status");
+                return ctx;
+            }
+        }
+    }
+
+    private boolean updateOfferStatus(Connection con, long offerId, long studentId, String newStatus) throws SQLException {
+        String sql = """
             UPDATE offers
             SET status = ?
             WHERE offer_id = ?
@@ -52,74 +122,60 @@ public boolean updateStatus(long offerId, long studentId, String status) throws 
               )
         """;
 
-        int changed;
-        try (PreparedStatement ps = conn.prepareStatement(updateOffer)) {
-            ps.setString(1, status);
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
             ps.setLong(2, offerId);
             ps.setLong(3, studentId);
-            changed = ps.executeUpdate();
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    private void updateApplicationStatusAccepted(Connection con, long applicationId, long studentId) throws SQLException {
+        // Only set the application status when accepted (keeps admin/company filters stable)
+        String sql = """
+            UPDATE applications
+            SET status = 'OFFER_ACCEPTED'
+            WHERE application_id = ? AND student_id = ?
+        """;
+
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setLong(1, applicationId);
+            ps.setLong(2, studentId);
+            ps.executeUpdate();
+        }
+    }
+
+    private void incrementHiredAndMaybeClose(Connection con, long jobId) throws SQLException {
+        // increment hired_count
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE job_listings SET hired_count = COALESCE(hired_count,0) + 1 WHERE job_id = ?")) {
+            ps.setLong(1, jobId);
+            ps.executeUpdate();
         }
 
-        if (changed <= 0) {
-            conn.rollback();
-            return false;
-        }
+        int hired = 0;
+        int positions = 0;
 
-        // 2) If student ACCEPTED, mark application as OFFER_ACCEPTED and increment hired count
-        if ("ACCEPTED".equalsIgnoreCase(status)) {
-
-            Long jobId = null;
-            Long applicationId = null;
-
-            // find application + job for this offer
-            try (PreparedStatement ps = conn.prepareStatement("""
-                SELECT a.application_id, a.job_id
-                FROM offers o
-                JOIN applications a ON a.application_id = o.application_id
-                WHERE o.offer_id = ? AND a.student_id = ?
-            """)) {
-                ps.setLong(1, offerId);
-                ps.setLong(2, studentId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        applicationId = rs.getLong("application_id");
-                        jobId = rs.getLong("job_id");
-                    }
-                }
-            }
-
-            if (applicationId != null) {
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE applications SET status='OFFER_ACCEPTED' WHERE application_id=?")) {
-                    ps.setLong(1, applicationId);
-                    ps.executeUpdate();
-                }
-            }
-
-            if (jobId != null) {
-                // increment hired_count
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE job_listings SET hired_count = COALESCE(hired_count,0) + 1 WHERE job_id=?")) {
-                    ps.setLong(1, jobId);
-                    ps.executeUpdate();
-                }
-
-                // auto-close if hired_count >= positions_available (and positions_available > 0)
-                try (PreparedStatement ps = conn.prepareStatement("""
-                    UPDATE job_listings
-                    SET status = 'CLOSED'
-                    WHERE job_id = ?
-                      AND positions_available > 0
-                      AND hired_count >= positions_available
-                """)) {
-                    ps.setLong(1, jobId);
-                    ps.executeUpdate();
+        // read counts
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COALESCE(hired_count,0) AS hired_count, COALESCE(positions_available,0) AS positions_available FROM job_listings WHERE job_id=?")) {
+            ps.setLong(1, jobId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    hired = rs.getInt("hired_count");
+                    positions = rs.getInt("positions_available");
                 }
             }
         }
 
-        conn.commit();
-        return true;}
+        // auto-close if positions_available > 0 and filled
+        if (positions > 0 && hired >= positions) {
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE job_listings SET status='CLOSED' WHERE job_id=?")) {
+                ps.setLong(1, jobId);
+                ps.executeUpdate();
+            }
+        }
     }
 
     private Offer map(ResultSet rs) throws SQLException {
@@ -129,7 +185,13 @@ public boolean updateStatus(long offerId, long studentId, String status) throws 
         o.setPackageLpa(rs.getDouble("package_lpa"));
         o.setJoiningDate(rs.getString("joining_date"));
         o.setStatus(rs.getString("status"));
-        o.setLetterPath(rs.getString("letter_path"));
+        o.setIssuedAt(rs.getString("issued_at"));
+
+        // ✅ Offer letter path (requires offers.letter_path column + Offer.setLetterPath)
+        try {
+            o.setletterPath(rs.getString("letter_path"));
+        } catch (SQLException ignore) { }
+
         return o;
     }
 }

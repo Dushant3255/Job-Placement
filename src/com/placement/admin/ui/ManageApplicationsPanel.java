@@ -32,21 +32,24 @@ public class ManageApplicationsPanel extends JPanel {
     private static final int COL_STUDENT = 4;
     private static final int COL_STUDENT_EMAIL = 5;
     private static final int COL_APP_STATUS = 6;
-    private static final int COL_OFFER_STATUS = 8;
-    private static final int COL_ADMIN_CONFIRMED = 9;
+
+    private static final int COL_OFFER_STATUS = 7;
+    private static final int COL_ADMIN_CONFIRMED = 8;
 
     public ManageApplicationsPanel() {
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(15, 15, 15, 15));
-        setBackground(new Color(245, 245, 245));
+        setBackground(AdminTheme.BG);
 
         add(createTopBar(), BorderLayout.NORTH);
 
         String[] cols = {
                 "Application ID", "Job ID", "Company", "Job Title",
                 "Student", "Student Email",
-                "App Status", "Interview At", "Offer Status",
-                "Admin Confirmed", "Applied"
+                "App Status",
+                "Offer Status",
+                "Admin Confirmed",
+                "Applied"
         };
 
         tableModel = new DefaultTableModel(cols, 0) {
@@ -58,7 +61,10 @@ public class ManageApplicationsPanel extends JPanel {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.getSelectionModel().addListSelectionListener(e -> updateButtonStates());
 
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        AdminTheme.styleTable(table);
+        JScrollPane sp = new JScrollPane(table);
+        AdminTheme.styleScrollPane(sp);
+        add(sp, BorderLayout.CENTER);
         add(createBottomBar(), BorderLayout.SOUTH);
 
         load(null);
@@ -66,14 +72,18 @@ public class ManageApplicationsPanel extends JPanel {
 
     private JPanel createTopBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        bar.setBackground(new Color(200, 200, 200));
+        bar.setBackground(AdminTheme.SURFACE);
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        bar.add(new JLabel("Search:"));
+        JLabel s = new JLabel("Search:");
+        AdminTheme.styleLabel(s);
+        bar.add(s);
+        AdminTheme.styleField(searchField);
         bar.add(searchField);
 
         JButton searchBtn = new JButton("Search");
         searchBtn.addActionListener(e -> load(searchField.getText()));
+        AdminTheme.styleButton(searchBtn, AdminTheme.ACCENT);
         bar.add(searchBtn);
 
         JButton refreshBtn = new JButton("Refresh");
@@ -81,6 +91,7 @@ public class ManageApplicationsPanel extends JPanel {
             searchField.setText("");
             load(null);
         });
+        AdminTheme.styleButton(refreshBtn, AdminTheme.MUTED_BUTTON);
         bar.add(refreshBtn);
 
         return bar;
@@ -89,16 +100,18 @@ public class ManageApplicationsPanel extends JPanel {
     private JPanel createBottomBar() {
         // Right-aligned with nicer spacing
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
-        bar.setBackground(new Color(200, 200, 200));
+        bar.setBackground(AdminTheme.SURFACE);
         bar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         confirmStatusBtn = new JButton("Confirm Status");
         confirmStatusBtn.addActionListener(e -> confirmStatus());
+        AdminTheme.styleButton(confirmStatusBtn, AdminTheme.ACCENT);
         bar.add(confirmStatusBtn);
 
         uploadOfferBtn = new JButton("Upload Offer Letter");
         uploadOfferBtn.setEnabled(false);
         uploadOfferBtn.addActionListener(e -> uploadOfferLetter());
+        AdminTheme.styleButton(uploadOfferBtn, AdminTheme.MUTED_BUTTON);
         bar.add(uploadOfferBtn);
 
         Dimension btnSize = new Dimension(180, 30);
@@ -114,7 +127,7 @@ public class ManageApplicationsPanel extends JPanel {
 
         for (ApplicationRow r : rows) {
             String adminConfirmedText = (r.adminConfirmed == 1) ? "YES" : "NO";
-            tableModel.addRow(new Object[]{
+                        tableModel.addRow(new Object[]{
                     r.applicationId,
                     r.jobId,
                     r.companyName,
@@ -122,7 +135,6 @@ public class ManageApplicationsPanel extends JPanel {
                     r.studentUsername,
                     r.studentEmail,
                     r.status,
-                    r.interviewScheduledAt == null ? "" : r.interviewScheduledAt,
                     r.offerStatus == null ? "" : r.offerStatus,
                     adminConfirmedText,
                     r.appliedAt
@@ -144,7 +156,7 @@ public class ManageApplicationsPanel extends JPanel {
         boolean canConfirm = st != null && (
                 st.equalsIgnoreCase("SHORTLISTED")
                         || st.equalsIgnoreCase("REJECTED")
-                        || st.equalsIgnoreCase("INTERVIEW_SCHEDULED")
+                        || st.equalsIgnoreCase("INTERVIEW PENDING")
         );
 
         boolean isConfirmed = isSelectedAdminConfirmed();
