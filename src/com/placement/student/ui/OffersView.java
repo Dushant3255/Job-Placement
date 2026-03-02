@@ -103,18 +103,22 @@ public class OffersView extends JPanel {
 
         JButton acceptBtn = new JButton("Accept");
         JButton rejectBtn = new JButton("Reject");
+        JButton viewBtn = new JButton("View Details");
         JButton closeBtn = new JButton("Close");
 
         StudentTheme.stylePrimaryButton(acceptBtn);
         StudentTheme.styleSecondaryButton(rejectBtn);
         StudentTheme.styleSecondaryButton(closeBtn);
+        StudentTheme.styleSecondaryButton(viewBtn);
 
         acceptBtn.addActionListener(e -> acceptSelected());
         rejectBtn.addActionListener(e -> rejectSelected());
+        viewBtn.addActionListener(e -> viewSelectedOffer());
         closeBtn.addActionListener(e -> StudentNav.goHome(this));
 
         p.add(acceptBtn);
         p.add(rejectBtn);
+        p.add(viewBtn);
         p.add(closeBtn);
 
         return p;
@@ -192,7 +196,110 @@ public class OffersView extends JPanel {
         }
     }
 
-    private void styleCombo(JComboBox<?> combo) {
+    
+private void viewSelectedOffer() {
+    long offerId = getSelectedOfferId();
+    if (offerId <= 0) {
+        UiUtil.error("Select an offer first.");
+        return;
+    }
+
+    Offer offer = null;
+    for (Offer o : cache) {
+        if (o.getOfferId() == offerId) { offer = o; break; }
+    }
+    if (offer == null) {
+        UiUtil.error("Could not load the selected offer.");
+        return;
+    }
+
+    showOfferDialog(offer);
+}
+
+private void showOfferDialog(Offer offer) {
+    JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Offer Letter (Offer ID: " + offer.getOfferId() + ")", Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setSize(700, 500);
+    dialog.setLocationRelativeTo(this);
+
+    JTextArea area = new JTextArea();
+    area.setEditable(false);
+    area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+    area.setLineWrap(true);
+    area.setWrapStyleWord(true);
+
+    String letterPath = offer.getletterPath();
+    if (letterPath == null || letterPath.isBlank()) {
+        area.setText("No letter attached to this offer.");
+    } else {
+        try {
+            java.nio.file.Path p = java.nio.file.Path.of(letterPath);
+            area.setText(java.nio.file.Files.exists(p) ? java.nio.file.Files.readString(p) : ("Letter file not found:\n" + letterPath));
+        } catch (Exception ex) {
+            area.setText("Failed to read letter:\n" + ex.getMessage());
+        }
+    }
+
+    JScrollPane sp = new JScrollPane(area);
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+
+    String st = offer.getStatus() == null ? "" : offer.getStatus().trim().toUpperCase();
+    boolean pending = "PENDING".equals(st) || st.isBlank();
+
+    if (pending) {
+        JButton accept = new JButton("Accept");
+        JButton reject = new JButton("Reject");
+
+        // Accept = green, Reject = red
+        accept.setBackground(new Color(34, 197, 94));
+        accept.setForeground(Color.WHITE);
+        accept.setFocusPainted(false);
+
+        reject.setBackground(new Color(239, 68, 68));
+        reject.setForeground(Color.WHITE);
+        reject.setFocusPainted(false);
+
+        accept.addActionListener(e -> {
+            if (!UiUtil.confirm("Accept offer ID " + offer.getOfferId() + "?")) return;
+            try {
+                boolean ok = offerController.accept(studentId, offer.getOfferId());
+                UiUtil.info(ok ? "Offer accepted." : "Offer could not be accepted.");
+                dialog.dispose();
+                refreshOffers();
+            } catch (ServiceException ex) {
+                UiUtil.error(ex.getMessage());
+            }
+        });
+
+        reject.addActionListener(e -> {
+            if (!UiUtil.confirm("Reject offer ID " + offer.getOfferId() + "?")) return;
+            try {
+                boolean ok = offerController.reject(studentId, offer.getOfferId());
+                UiUtil.info(ok ? "Offer rejected." : "Offer could not be rejected.");
+                dialog.dispose();
+                refreshOffers();
+            } catch (ServiceException ex) {
+                UiUtil.error(ex.getMessage());
+            }
+        });
+
+        buttons.add(reject);
+        buttons.add(accept);
+    }
+
+    JButton close = new JButton("Close");
+    StudentTheme.styleSecondaryButton(close);
+    close.addActionListener(e -> dialog.dispose());
+    buttons.add(close);
+
+    dialog.getContentPane().setLayout(new BorderLayout());
+    dialog.getContentPane().add(sp, BorderLayout.CENTER);
+    dialog.getContentPane().add(buttons, BorderLayout.SOUTH);
+
+    dialog.setVisible(true);
+}
+
+private void styleCombo(JComboBox<?> combo) {
         combo.setFont(StudentTheme.fontBold(12));
         combo.setBackground(new Color(243, 244, 246));
         combo.setForeground(new Color(31, 41, 55));
